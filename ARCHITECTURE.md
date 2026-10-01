@@ -130,5 +130,23 @@ dedup rules must be frozen before implementation.
    - Recipient lists are deduplicated by `entity_id` at task creation; the worker consults the delivery log
      per recipient before each send.
 
+### ADR-004: Permission rules & private-source grants (2026-10-01)
+**Status:** accepted. **Context:** WP-E1-03 needs the rule format, precedence, and the ownership/grants model frozen.
+
+1. **Rule JSON format** (stored in `permission_rules.rule_json`):
+   `{subject_entity_id ("*" = all entities), resource_type ("source"|"tool"|"conversation"|"task"),
+     resource_id ("*" = all of that type), action ("read"|"write"|"execute"|"share"),
+     effect ("allow"|"deny"|"ask"), priority (integer), created_by, note}`.
+   `ask` = pause for human approval; nothing proceeds until approved/rejected.
+2. **Precedence (fail closed):** (a) explicit `deny` beats everything; (b) more specific beats more general
+   (entity+resource > entity-only > wildcard); (c) `ask` beats `allow`; (d) same specificity → higher
+   `priority` wins, ties → `deny`; (e) no matching rule → `deny`.
+3. **Private sources:** every private source is registered in `sources(id, workspace_id, owner_type, owner_id,
+   visibility)` where visibility is `private` (default) or `shared`. The registering entity/user owns it.
+4. **Grants:** ownership never transfers by chat. Sharing = a row in `source_grants(source_id,
+   grantee_entity_id, scope ("read"), granted_by, created_at)`. Only the owner (or workspace admin) may grant.
+5. **Context packages** (WP-E1-03) may include a source only if the recipient owns it, has a grant, or the
+   source is `shared` — checked per recipient, per task. Group membership grants messages, never sources.
+
 ### ADR template for future entries
 `### ADR-NNN: Title (YYYY-MM-DD)` + Status + Context + numbered decisions.
