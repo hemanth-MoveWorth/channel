@@ -74,7 +74,7 @@ Implementation: [`src/a2a/mapping.ts`](../../packages/mcp-server/src/a2a/mapping
 
 #### 3.1 Why `awaiting_approval` → `WORKING`
 
-A human approval can't be resolved by the A2A client. `INPUT_REQUIRED` would invite the client to send input that changes nothing. `AUTH_REQUIRED` would invite it to send credentials. Both are untruthful and the second is dangerous. `WORKING` tells the client to wait, and the exact state rides in metadata for clients that understand the approvals extension. (ADR-P3)
+A human approval can't be resolved by the A2A client. `INPUT_REQUIRED` would invite the client to send input that changes nothing. `AUTH_REQUIRED` would invite it to send credentials. Both are untruthful and the second is dangerous. `WORKING` tells the client to wait, and the exact state rides in metadata for clients that understand the approvals extension. (ADR-008)
 
 ## 4. Messages and parts
 

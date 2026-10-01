@@ -170,10 +170,52 @@ dedup rules must be frozen before implementation.
      body, parent_message_id?, task_id?, created_at}`
    - Inbox item: `{kind: "task"|"mention"|"message", ref_id, summary, created_at}`
 
-### Proposed by Entity 2: ADR-P1 … ADR-P6 (2026-10-01)
-**Status:** proposed, awaiting Mow's ruling. Not accepted.
+### ADR-006: Prototype scope includes connection type B (accepts P1)
+**Status:** accepted. **Context:** ARCHITECTURE §2.3 said "prototype needs type A only", but WP-E2-01's own acceptance (Claude Code over stdio) is type B, and the whole point of Phase 0 is testing with real local tools.
 
-All entries below are **PROPOSED by Entity 2 (2026-10-01), awaiting Mow's decision**. Code written against them is marked as such, and it's cheap to change.
+1. The prototype covers connection types **A + B**. Type C stays deferred.
+2. Orchestrators stay **type A only**; `createGroup` enforces this.
+3. A SignalDesk-hosted built-in orchestrator is a later type A entity.
+
+### ADR-007: MCP↔core adapter interface (accepts P2 as amended)
+**Status:** accepted. **Context:** P2's wire-contract and transition-table claims are superseded by ADR-003 §§1–2. What remains is the MCP layer's internal adapter contract over ADR-003's `/v1`.
+
+1. ADR-003 §2 stays the frozen wire contract; ADR-003 §1 stays the normative transition table.
+2. CORE-API.md is adopted as the **adapter interface** the MCP layer speaks to Entity 1's core: identity bound at `authenticate(apiKey)` with no caller/from/self-id parameters anywhere; approvals, grants, and skill verification exist only on the human-only `AdminApi` (per ADR-005 §1); non-disclosure (`not_found`, never `forbidden`) for invisible objects; receipts per message per recipient; `accepted_for_execution` on a task's origin message at accept.
+3. **Reconciliation (Entity 1, after push):** E1 confirms their real `/v1` API has no caller-spoofable fields, or files an amendment through Mow.
+
+### ADR-008: Task reasons and A2A state mapping (accepts P3 as amended)
+**Status:** accepted. **Context:** §2.4's state list is frozen; A2A distinguishes "won't do" from "tried and failed", and `awaiting_approval` has no faithful A2A equivalent. The approval-rejection question is settled by ADR-005 §2 (`cancelled`).
+
+1. **Closed `TaskReason` enum** (carried on transitions; Entity 1 owns it in the real core): `rejected_by_assignee`, `approval_rejected`, `permission_denied`, `assignee_reported_failure`, `policy_requires_approval`, `hop_limit_reached`, `no_progress_limit_reached`, `budget_runtime_exceeded`, `stopped_by_user`, `parent_cancelled`.
+2. **Assignee declines before accepting:** the assignee transitions its assigned task `queued → cancelled` with `reason=rejected_by_assignee` (edge exists in ADR-003 §1; ADR-005 §3(a) gives the assignee transition rights). No transition-table amendment needed. This keeps "`failed` = attempted and broke" (ADR-005 §2) intact.
+3. **A2A mapping:** `failed` + `permission_denied` → `TASK_STATE_REJECTED`; `failed` + any other reason → `TASK_STATE_FAILED`; `cancelled` (any reason) → `TASK_STATE_CANCELED`; `awaiting_approval` → `TASK_STATE_WORKING` + `metadata["signaldesk/state"]="awaiting_approval"`.
+
+### ADR-009: Action categories and two-sided authorisation (accepts P4 as amended)
+**Status:** accepted. **Context:** §2.8 names "standing rules" but no category set; WP-E1-03 built the permission engine without one. This is the normative model; Entity 1's engine is the real implementation.
+
+1. Fixed ordered categories, lowest to highest risk: `research < read_context < tool_use < write < send_external < publish`.
+2. A task requires **both**: (a) a requester grant for its category, checked at `createTask` (refused with 422 if missing — fail closed); **and** (b) the assignee's human-set policy for the category to be `allow`/`ask`, evaluated when the assignee accepts. A deny from either side is final. `ask` → `working → awaiting_approval` (`reason=policy_requires_approval`).
+3. The assignee may `reclassify` **upward only**, from `working`, re-running both checks; denied → `working → failed` (`reason=permission_denied`); ask → `working → awaiting_approval`. (Reclassify from `queued`/`input_required` in E2's original table is superseded by ADR-003 §1.)
+4. Bootstrap defaults: new entity grants = `{research}`, policy = `ask_every_time` (SECURITY.md §3.2).
+5. **Reconciliation (Entity 1, after push):** E1 confirms the engine adopts this category model and the two-sided check, or files an amendment through Mow. This coexists with ADR-004: ADR-004 rules govern sources/tools/conversations/tasks; ADR-009 governs task action categories.
+
+### ADR-010: `get_task` MCP tool (accepts P5)
+**Status:** accepted. **Context:** requesters could only learn task state by draining `check_inbox`.
+
+1. Add a read-only `get_task(taskId)` MCP tool: party-only (requester/assignee), non-disclosing (`not_found` to anyone else, per ADR-007 §2).
+
+### ADR-011: Task assignment inside groups (accepts P6)
+**Status:** accepted. **Context:** §2/§3 didn't say who may assign tasks in a group; the reference core let any member assign.
+
+1. New per-group setting `assignment: "any_member" | "orchestrator_only"`. Default: `orchestrator_only` when an orchestrator is set, `any_member` when none is set.
+2. The group create/update schema carries this setting; the dashboard (WP-E1-04) surfaces it.
+3. `any_member` is not a privilege escalation: every assignment still passes ADR-009's two-sided category checks.
+
+### Proposed by Entity 2: ADR-P1 … ADR-P6 (2026-10-01)
+**Status:** ~~proposed, awaiting Mow's ruling. Not accepted.~~ Proposed, then **accepted** by Mow as ADR-006 … ADR-011 (P1 → ADR-006; P2 → ADR-007 as amended; P3 → ADR-008 as amended; P4 → ADR-009 as amended; P5 → ADR-010; P6 → ADR-011). Kept for the record; the accepted ADRs above are normative.
+
+All entries below are **PROPOSED by Entity 2 (2026-10-01)**, ~~awaiting Mow's decision~~ *(since accepted as ADR-006 … ADR-011)*. Code written against them is marked as such, and it's cheap to change.
 
 - **ADR-P1: Prototype scope includes connection type B.** *Problem:* §2.3 says "prototype needs type A only", but WP-E2-01 acceptance (Claude Code over stdio) and real-tool testing are type B. *Proposal:* the prototype covers A + B. C stays deferred. Orchestrators stay type A only, which `createGroup` enforces. A SignalDesk-hosted built-in orchestrator is a later type A entity.
 - **ADR-P2: Freeze the core interface.** *Partly superseded by ADR-003.* Where this entry overlaps ADR-003, ADR-003 is normative: §2 for the frozen Core API v0.1 wire contract, §1 for legal task transitions. Superseded spots are struck through and kept for the record. The rest of the entry is still proposed. *Problem:* ~~WP-E2-01 must freeze the MCP↔core interface before Entity 1's core exists.~~ *(superseded: ADR-003 §2 froze it.)* *Proposal:* ~~adopt docs/protocol/CORE-API.md.~~ *(superseded as the wire contract by ADR-003 §2. CORE-API.md stays proposed only as the MCP layer's internal adapter interface over `/v1`.)* Identity is bound at `authenticate(apiKey)`, with no `caller` parameters. Approvals, grants and verification exist only on `AdminApi`, which is human-only. Non-disclosure (`not_found`) applies to invisible objects. ~~The **state-transition table** (CORE-API §3) replaces the linear reading of §2.4.~~ *(superseded by ADR-003 §1.)* Receipts are per message per recipient, and `accepted_for_execution` sits on a task's origin message (CORE-API §4). *Today:* the MCP server is built against it. A dev-only `/core/rpc` stands in for Entity 1's API until WP-E1 lands.
