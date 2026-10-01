@@ -98,5 +98,37 @@ service until the concept is proven working locally. Only GitHub is used (for co
 7. Supabase/Render enter only after the prototype meets the §4 "working" exit criteria locally — decided by a
    separate ADR at that time.
 
+### ADR-003: Task transitions, API contracts, delivery dedup (2026-10-01)
+**Status:** accepted. **Context:** WP-E1-02 stopped at the spec boundary — transitions, API shapes, and
+dedup rules must be frozen before implementation.
+
+1. **Legal task transitions** (every transition appended to `task_events`; anything else → 422):
+   - `submitted` → `queued`, `cancelled`
+   - `queued` → `working`, `cancelled`
+   - `working` → `input_required`, `awaiting_approval`, `completed`, `failed`, `cancelled`
+   - `input_required` → `working`, `cancelled`
+   - `awaiting_approval` → `working` (approved, resumes), `cancelled` (rejected, reason=`approval_rejected`)
+   - `failed` → `queued` (manual retry only; increments attempt counter, new idempotency scope)
+   - Terminal states with no outgoing edges: `completed`, `failed`, `cancelled`
+2. **Core API v0.1 (frozen)** — base `/v1`, JSON, envelope `{data}` or `{error:{code,message}}`:
+   - Auth: `Authorization: Bearer <entity_key>`; the human UI is trusted locally in the prototype.
+   - `POST /v1/entities` (register), `GET /v1/entities?capability=`, `GET /v1/entities/:id`
+   - `POST /v1/conversations`, `GET /v1/conversations`, `POST /v1/conversations/:id/messages`,
+     `GET /v1/conversations/:id/messages`
+   - `POST /v1/tasks` (accepts `Idempotency-Key` header), `GET /v1/tasks/:id`,
+     `POST /v1/tasks/:id/transition {to_state, reason}`, `POST /v1/tasks/:id/approve`, `POST /v1/tasks/:id/reject`
+   - `GET /v1/inbox` — the calling entity's pending tasks and mentions.
+   - **Webhook (SignalDesk → entity):** `POST {entity.webhook_url}` with
+     `{task_id, kind, context_package, idempotency_key, reply_to}`. Entity ACKs `200 {accepted:true}`;
+     results return via `POST /v1/tasks/:id/transition` or messages. Webhook retries use backoff with the
+     **same** idempotency key per attempt set.
+3. **Exactly-once side effects:**
+   - `deliveries(idempotency_key PK, task_id, action, recipient_entity_id, status, response, created_at)`.
+   - Key format: `{task_id}:{attempt}:{action}:{recipient_entity_id}`.
+   - Before any external side effect (webhook POST, message fan-out), check the `deliveries` log:
+     key exists with `status=delivered` → skip. At-least-once delivery + idempotent keys = effectively-once.
+   - Recipient lists are deduplicated by `entity_id` at task creation; the worker consults the delivery log
+     per recipient before each send.
+
 ### ADR template for future entries
 `### ADR-NNN: Title (YYYY-MM-DD)` + Status + Context + numbered decisions.
