@@ -21,7 +21,7 @@ export function migrate(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)');
   const applied = [];
   for (const name of readdirSync(migrationsDirectory).filter(name => name.endsWith('.sql')).sort()) {
-    const sql = readFileSync(resolve(migrationsDirectory,name),'utf8');
+    const sql = readFileSync(resolve(migrationsDirectory,name),'utf8').replace(/\r\n/g,'\n');
     const checksum = createHash('sha256').update(sql).digest('hex');
     transaction(db, () => {
       const prior = db.prepare('SELECT checksum FROM schema_migrations WHERE name=?').get(name);

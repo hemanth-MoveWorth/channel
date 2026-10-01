@@ -5,6 +5,8 @@
   "type": "module",
   "engines": { "node": ">=22.13.0" },
   "scripts": {
+    "start": "node scripts/server.mjs",
+    "worker": "node scripts/worker.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs"
