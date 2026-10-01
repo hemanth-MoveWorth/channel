@@ -7,23 +7,26 @@ Orchestrator: Mow. Contract: `ARCHITECTURE.md` (v0.1). No code against anything 
 
 ## ENTITY 1 — Core engine
 
-### WP-E1-01 — Database schema + local Supabase
-**Objective:** Postgres schema for the whole prototype, running on Supabase local (Docker).
+### WP-E1-01 — Database schema (SQLite, zero external services)
+**Objective:** Portable SQL schema for the whole prototype on a local SQLite file. No Supabase, no Docker, no hosted anything (ADR-002).
 **Deliverables:**
-- SQL migrations under `supabase/migrations/`
-- Tables: `users`, `entities` (name, owner, description, capabilities JSONB, connection_type A/B/C,
-  webhook_url, verified_permissions JSONB, availability, last_check), `conversations`,
+- Plain `.sql` migrations under `db/migrations/`, applied in order (write a tiny migrate script; no external tools)
+- Tables: `users`, `workspaces`, `workspace_members`, `entities` (name, owner, description, capabilities JSON,
+  connection_type A/B/C, webhook_url, verified_permissions JSON, availability, last_check),
+  `entity_credentials` (key hashes — never logged), `conversations`,
   `conversation_members` (with `is_orchestrator` flag), `messages`, `tasks` (state machine),
-  `task_events`, `permission_rules`, `approvals`, `context_packages`, `audit_log`
-- Seed script with 2 demo entities and 1 group
-**Acceptance:** `supabase start` + migrations apply cleanly; RLS on with basic policies; seed loads; Entity 2 can read the schema.
+  `task_events`, `permission_rules`, `approvals`, `context_packages`, `audit_log`, `job_queue`
+- `db/policies.md`: the ADR-001 access rules as policy specifications (enforced in app code for now; real RLS later)
+- Seed script with 2 demo entities and 1 group; DB path via `SIGNALDESK_DB_PATH` (default `./data/channel.db`)
+**Acceptance:** migrations apply cleanly to a fresh SQLite file; seed loads; a test proves an unauthorized access
+attempt is rejected at the application layer per `db/policies.md`. No network calls, no containers.
 
 ### WP-E1-02 — Task service + workers
 **Objective:** Task lifecycle + durable background delivery.
 **Deliverables:**
 - State machine: `submitted → queued → working → input_required → awaiting_approval → completed | failed | cancelled`, all transitions in `task_events`
 - Delivery receipts per task/request: `stored → delivered → accepted_for_execution`
-- Worker process consuming a durable queue (Supabase Queues locally); retries with **idempotency keys** — a retried task must never repeat a side effect
+- Worker process polling the `job_queue` table; retries with **idempotency keys** — a retried task must never repeat a side effect
 **Acceptance:** kill the worker mid-task, restart it: task resumes, side effect happened exactly once (prove with a test); cancel/stop works from the API.
 
 ### WP-E1-03 — Permission engine + approvals + context packages
@@ -80,4 +83,4 @@ group creation + orchestrator selection, stop button.
 3. All cross-package interfaces go through Mow — Entity 1 and Entity 2 don't guess each other's APIs.
 4. Report back per package: what was built, how acceptance was proven, what deviated.
 5. Branches & PRs: never push directly to `main`. Work on `feat/wp-xxx` branches, open a PR, Mow reviews and merges.
-6. No Docker? Use a hosted Supabase dev project for testing (ADR-001 §7). Migrations must stay vanilla SQL.
+6. Zero external services (ADR-002): SQLite only. No Supabase/Render/Docker/hosted anything until the prototype proves itself locally.
