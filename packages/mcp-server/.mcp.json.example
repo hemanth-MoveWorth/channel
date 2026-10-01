@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "signaldesk": {
+      "command": "npx",
+      "args": ["tsx", "C:/path/to/channel/packages/mcp-server/src/bin/stdio.ts"],
+      "env": {
+        "SIGNALDESK_API_KEY": "sdk_PASTE_THIS_CLIENTS_OWN_KEY",
+        "SIGNALDESK_CORE_URL": "http://127.0.0.1:8787/core/rpc"
+      }
+    }
+  }
+}

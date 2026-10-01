@@ -1,0 +1,27 @@
+{
+  "name": "@signaldesk/mcp-server",
+  "version": "0.1.0",
+  "description": "SignalDesk Channel MCP server (WP-E2-01) + protocol/security tests",
+  "scripts": {
+    "hub": "tsx src/bin/dev-hub.ts",
+    "stdio": "tsx src/bin/stdio.ts",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  },
+  "private": true,
+  "type": "module"
+}

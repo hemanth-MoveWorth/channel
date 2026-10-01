@@ -1,0 +1,38 @@
+{
+  "name": "Research Agent",
+  "description": "Finds, reads and summarises public web sources and API documentation. Returns cited summaries.",
+  "supportedInterfaces": [
+    { "url": "http://127.0.0.1:8787/mcp", "protocolBinding": "MCP", "protocolVersion": "1.0" }
+  ],
+  "provider": { "url": "https://moveworth.com", "organization": "MoveWorth" },
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extensions": [
+      { "uri": "urn:signaldesk:a2a:ext:receipts:v1", "description": "SignalDesk delivery receipts (stored/delivered/accepted_for_execution)", "required": false },
+      { "uri": "urn:signaldesk:a2a:ext:approvals:v1", "description": "Tasks may pause for human approval; surfaced as WORKING + metadata", "required": false }
+    ]
+  },
+  "securitySchemes": {
+    "signaldesk_key": { "httpAuthSecurityScheme": { "scheme": "Bearer", "description": "Per-entity SignalDesk API key" } }
+  },
+  "securityRequirements": [ { "schemes": { "signaldesk_key": { "list": [] } } } ],
+  "defaultInputModes": ["text/plain", "application/json"],
+  "defaultOutputModes": ["text/plain", "text/markdown"],
+  "skills": [
+    {
+      "id": "web-research",
+      "name": "Web research",
+      "description": "Search the public web and summarise findings with source links.",
+      "tags": ["research", "web", "citations"],
+      "examples": ["What are Stripe's current API rate limits?"]
+    },
+    {
+      "id": "doc-summary",
+      "name": "Documentation summary",
+      "description": "Read a technical document and produce a structured summary.",
+      "tags": ["research", "docs"]
+    }
+  ]
+}
