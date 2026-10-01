@@ -148,5 +148,27 @@ dedup rules must be frozen before implementation.
 5. **Context packages** (WP-E1-03) may include a source only if the recipient owns it, has a grant, or the
    source is `shared` — checked per recipient, per task. Group membership grants messages, never sources.
 
+### ADR-005: Approval auth, task update rights, dashboard & payload shapes (2026-10-01)
+**Status:** accepted. **Context:** Entity 2's three open points + WP-E1-04's spec boundary. Amends ADR-001 §6 and ADR-003 §2.
+
+1. **Approve/reject are human-only (amends ADR-003 §2).** `POST /v1/tasks/:id/approve` and `/reject` MUST
+   reject any request bearing an entity API key (403). An agent must never be able to approve paused work,
+   including its own. Prototype human auth: the local UI is trusted (documented gap; real login later).
+2. **Rejected approval → `cancelled` stands (ADR-003 kept).** `failed` means the work attempted and broke;
+   `cancelled` with `reason=approval_rejected` is accurate. A2A mapping uses `cancelled`. Entity 2's P3 is
+   superseded on this point only.
+3. **Task update rights extended (amends ADR-001 §6).** An entity may: (a) transition tasks **assigned to it**;
+   (b) **cancel** tasks it created (requester); (c) submit input to tasks it created while
+   `state=input_required`. All other updates → 403. Everything audit-logged.
+4. **Dashboard list endpoints (new, frozen):** `GET /v1/tasks?status=&assignee=&requester=` (paginated),
+   `GET /v1/approvals?state=pending`, `GET /v1/conversations` (already in ADR-003). The trusted local UI
+   uses these for the human dashboard.
+5. **Payload shapes (frozen):**
+   - Conversation: `{id, workspace_id, type: "dm"|"group", title, member_ids[], orchestrator_entity_id?,
+     created_at}`
+   - Message: `{id, conversation_id, sender ("human"|entity_id), kind: "chat"|"task_request"|"task_result"|"system",
+     body, parent_message_id?, task_id?, created_at}`
+   - Inbox item: `{kind: "task"|"mention"|"message", ref_id, summary, created_at}`
+
 ### ADR template for future entries
 `### ADR-NNN: Title (YYYY-MM-DD)` + Status + Context + numbered decisions.
