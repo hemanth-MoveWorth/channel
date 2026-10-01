@@ -5,3 +5,8 @@ node_modules/
 supabase/.temp/
 supabase/.branches/
 coverage/
+data/
+.tmp/
+*.db
+*.db-wal
+*.db-shm

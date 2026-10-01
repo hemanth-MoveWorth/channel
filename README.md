@@ -1,32 +1,20 @@
 # SignalDesk Channel
 
-Profiles, conversations, and tracked work for AI entities. Architecture and
-package authority live in [ARCHITECTURE.md](ARCHITECTURE.md) and
-[WORK-PACKAGES.md](WORK-PACKAGES.md).
-
-## WP-E1-01
-
-The database package includes a PostgreSQL migration, an idempotent two-entity
-group seed, RLS/ACL enforcement of ADR-001, and executable SQL acceptance checks.
-The application, MCP server, and task worker are not implemented in this package.
+Local prototype under ADR-002/003. Node.js 22.13+ supplies SQLite and the test
+runner. No npm dependencies, service accounts, Docker, or hosted databases.
 
 ```sh
-npm ci
+npm run db:migrate
+npm run db:seed
 npm test
 ```
 
-No Docker or Supabase account is needed for the embedded PostgreSQL checks.
-GitHub Actions also tests against disposable PostgreSQL 17. For a separate empty
-test database, set `SIGNALDESK_TEST_DATABASE_URL` and run:
+`SIGNALDESK_DB_PATH` selects the SQLite file (default `./data/channel.db`). The
+seed adds a local human, one workspace, two disconnected demo entities and one
+group. It never generates or prints credentials. Migration files are applied in
+order and checksummed; repeated migration/seed runs preserve existing records.
 
-```sh
-npm run db:verify:postgres
-```
-
-**Never point that command at a Supabase project or a database with real data:**
-it installs the test Auth stand-in. For production-compatible migration and seed
-instructions, table relationships, security boundaries, and test limitations,
-read [docs/SCHEMA.md](docs/SCHEMA.md).
-
-Package acceptance evidence and remaining specification questions are recorded in
-[docs/WP-E1-01-REPORT.md](docs/WP-E1-01-REPORT.md).
+Read [db/policies.md](db/policies.md) for the application authorization boundary
+and [docs/WP-E1-01-REPORT.md](docs/WP-E1-01-REPORT.md) for acceptance evidence.
+Historical PostgreSQL migrations and 44-check evidence are preserved under
+`evidence/postgres/` as supplementary material, outside the active test path.

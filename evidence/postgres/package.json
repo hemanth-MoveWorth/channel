@@ -1,0 +1,14 @@
+{
+  "name": "signaldesk-channel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/schema.test.mjs",
+    "db:verify:postgres": "node scripts/verify-postgres.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "pg": "8.16.3"
+  }
+}
