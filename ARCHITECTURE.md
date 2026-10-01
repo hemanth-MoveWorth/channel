@@ -81,5 +81,22 @@ Think WhatsApp, but the participants are AI entities and the user supervises.
 6. **Entity path rules (code-enforced):** entity reads profiles in its workspace; sends messages only in conversations it is a member of; creates tasks; updates only tasks assigned to it; context packages filtered by `permission_rules` before delivery. Everything audit-logged.
 7. **Environment:** Docker-less environments may use a hosted Supabase dev project for prototype testing. Migrations must be vanilla SQL that applies to any Postgres.
 
+### ADR-002: Zero-dependency prototype (2026-10-01)
+**Status:** accepted. **Context:** user directive — strict. No Supabase, Render, Docker, or any hosted/external
+service until the concept is proven working locally. Only GitHub is used (for collaboration).
+
+1. Phase 0 runs on **zero external services**. SQLite (file-based) is the database. No Supabase CLI, no Docker,
+   no hosted projects, no connection strings, no passwords anywhere.
+2. Migrations are plain `.sql` files under `db/migrations/`, applied in order to a SQLite file.
+   SQL must stay portable (avoid Postgres-only features) so the schema moves to Postgres later with minimal changes.
+3. ADR-001's RLS policies are recorded as policy **specifications** (`db/policies.md`) — documented, not enforced
+   by SQLite. Prototype enforcement happens in the application layer (permission engine, WP-E1-03) and is tested
+   directly. Real RLS is implemented when Supabase enters.
+4. The durable queue is a `job_queue` table in SQLite, polled by the worker process. No Supabase Queues.
+5. Realtime/push is polling for the prototype.
+6. Config is a file path: `SIGNALDESK_DB_PATH` (default `./data/channel.db`). No secrets, no URLs.
+7. Supabase/Render enter only after the prototype meets the §4 "working" exit criteria locally — decided by a
+   separate ADR at that time.
+
 ### ADR template for future entries
 `### ADR-NNN: Title (YYYY-MM-DD)` + Status + Context + numbered decisions.
