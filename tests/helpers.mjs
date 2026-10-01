@@ -2,10 +2,14 @@ import { mkdtempSync,mkdirSync,rmSync } from 'node:fs';
 import { join,resolve } from 'node:path';
 import { openDatabase,migrate } from '../src/database.mjs';
 import { seed,demo } from '../src/seed.mjs';
-export function fixture() {
+import { setPermissionMode } from '../src/permissions.mjs';
+export function fixture({mode='full_access_workspace'}={}) {
   const root=resolve('.tmp');mkdirSync(root,{recursive:true});
   const dir=mkdtempSync(join(root,'task-')); const path=join(dir,'channel.db');
   const db=openDatabase(path); migrate(db); seed(db);
+  // Existing queue tests explicitly authorize their local test recipients.
+  // Production seed never grants this mode implicitly.
+  if(mode)setPermissionMode(db,{kind:'human',user_id:demo.user},demo.workspace,'*',mode);
   return {db,path,dir,owner:{kind:'human',user_id:demo.user},body:{workspace_id:demo.workspace,conversation_id:demo.group,
     assigned_entity_id:demo.research,goal:'Perform the local acceptance action'},close(){db.close();rmSync(dir,{recursive:true,force:true});}};
 }

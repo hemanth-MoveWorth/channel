@@ -1,6 +1,6 @@
 # SignalDesk Channel
 
-Local prototype under ADR-002/003. Node.js 22.13+ supplies SQLite and the test
+Local prototype under ADR-002/003/004. Node.js 22.13+ supplies SQLite and the test
 runner. No npm dependencies, service accounts, Docker, or hosted databases.
 
 ```sh
@@ -32,8 +32,21 @@ npm run worker
 The API binds to `127.0.0.1:3000`. Phase 0 webhook delivery accepts loopback
 recipients only. Demo profiles have no webhooks; the executable acceptance tests
 provide actual local HTTP recipients and durable SQLite effects. They use no
-external service. The entity registration/chat UI and complete approval/context
-engine are later packages, so this is not a claim of a finished product.
+external service. The entity registration/chat UI is a later package, so this is
+not a claim of a finished product.
 
 See [docs/API-v0.1.md](docs/API-v0.1.md) for the implemented task routes and
 [docs/WP-E1-02-REPORT.md](docs/WP-E1-02-REPORT.md) for crash/restart evidence.
+
+## WP-E1-03 permissions, approvals and context
+
+The seed grants no execution permissions: requests fail closed until the local
+admin configures rules. `src/permissions.mjs` exposes authenticated local helpers
+for standing rules and permission modes; source registration and grants are in
+`src/sources.mjs`. No additional management HTTP routes have been invented.
+
+The worker checks every recipient before sending, pauses ask decisions in
+`awaiting_approval`, and resumes through the frozen approve/reject endpoints.
+Private sources require ownership, an explicit read grant, or shared visibility
+even in full-access mode. See [docs/PERMISSIONS.md](docs/PERMISSIONS.md) and
+[docs/WP-E1-03-REPORT.md](docs/WP-E1-03-REPORT.md) for behavior and acceptance evidence.

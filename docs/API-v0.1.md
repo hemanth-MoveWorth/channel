@@ -1,7 +1,7 @@
 # ADR-003 task API implementation
 
 The API uses `/v1`, JSON, and `{data}` / `{error:{code,message}}`. This package
-implements task creation/read/transition and read-only entity discovery. Other
+implements task creation/read/transition/approval and read-only entity discovery. Other
 frozen routes remain assigned to later packages; no replacement routes are added.
 
 All HTTP traffic in Phase 0 is loopback. The server binds to `127.0.0.1:3000` and
@@ -31,12 +31,14 @@ assigned entity is omitted, the first sorted distinct recipient is assigned. All
 recipients must belong to this conversation. The assigned entity owns task-state
 callbacks; other recipients may contribute through the later message service.
 
-Creation atomically records submitted, transitions to queued, and persists one
-job per distinct recipient. New requests return 201; a matching replay returns
+Creation checks all recipients, records submitted, transitions allowed/ask work
+to queued, and persists one job per distinct recipient. Denied requests return
+403 with a reason and retain a cancelled task and audit trail without jobs.
+New permitted requests return 201; a matching replay returns
 200 with the same task. Reusing the workspace-scoped key for a different actor or
 payload returns 409. Without a header, the server generates a key, so callers
 requiring retry deduplication must supply one. No client-supplied state, identity,
-verified permission, raw context, or execution result is accepted at creation.
+verified permission, caller-supplied history, or execution result is accepted at creation.
 
 ## State and stop
 
@@ -55,10 +57,12 @@ exception to its terminal-state wording. It increments the attempt and creates
 a new delivery-key scope. Automatic transport retries keep the existing attempt.
 
 Generic transition requests cannot approve work, even if they include an extra
-`approvalDecision` field. The internal approval hook requires an authorized human
-and is reserved for the WP-E1-03 approve/reject endpoints. Approval rejection sets
-`approval_rejected`. Until that package exists, approval-gated tasks cannot resume
-through this API. Full permission-rule evaluation is not claimed here.
+`approvalDecision` field. Use `POST /v1/tasks/:id/approve` or `/reject` with `{}`.
+Only a workspace admin/owner human may decide. Approval rechecks current rules
+and source access, resumes working, and scopes the decision to this task attempt.
+Rejection cancels with `approval_rejected`; repeated identical decisions are
+idempotent. Stale approvals return 409; newly denied access returns 403. Human
+task reads include approval records; entity reads do not expose approval details.
 
 ## Delivery and failure recovery
 
@@ -86,8 +90,13 @@ from 250 ms capped at 30 s. Transport failures remain retryable until the task i
 stopped or a later budget policy ends it. Runtime/cost/delegation budget policy is
 not supplied by this package and remains required for prototype sign-off.
 
-The current context contains only the explicit goal and empty source/history
-lists. Reading private sources awaits WP-E1-03's per-recipient permission checks.
+Task creation may supply `resource_type`, `resource_id`, and `action`; defaults
+are this task's ID and `task/execute`. `context_package` accepts explicit `facts`,
+`source_refs` (registered source IDs), `constraints`, and `expected_output`.
+The server assembles the history slice from this conversation, with membership
+and conversation-read permission checks. Every source needs recipient access and
+read permission. No document-content fetching is implemented by these metadata
+tables. See `PERMISSIONS.md` for the boundary and mode configuration.
 
 ## Effect guarantee and cancellation scope
 

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { transaction } from './database.mjs';
 import { move,rawTask,recordEvent,now } from './tasks.mjs';
+import { executionGate } from './context.mjs';
 
 export function loopbackUrl(value) {
   const url=new URL(value);
@@ -34,9 +35,20 @@ export class Worker {
         db.prepare("UPDATE job_queue SET status='done',lease_token=NULL,lease_until=NULL WHERE id=?").run(job.id);
         return {skipped:true};
       }
+      const gate=executionGate(db,task);
+      if(gate.effect==='deny') {
+        db.prepare('UPDATE tasks SET blocked_reason=? WHERE id=?').run(gate.reason,task.id);
+        move(db,task,'failed',`permission_denied:${gate.reason}`);
+        return {skipped:true};
+      }
+      if(gate.effect==='ask') {
+        move(db,task,'awaiting_approval','human_approval_required');
+        db.prepare("UPDATE job_queue SET status='pending',lease_token=NULL,lease_until=NULL WHERE task_id=? AND status='leased'").run(task.id);
+        return {skipped:true};
+      }
       db.prepare(`INSERT INTO deliveries VALUES (?,?,?,?,'pending',NULL,?) ON CONFLICT(idempotency_key) DO NOTHING`)
         .run(job.idempotency_key,job.task_id,job.action,job.recipient_entity_id,now());
-      return {...job,lease_token:token,tries:job.tries+1,task};
+      return {...job,lease_token:token,tries:job.tries+1,task,context:gate.packages[job.recipient_entity_id]};
     });
   }
   async tick() {
@@ -59,9 +71,7 @@ export class Worker {
       if (!entity || entity.connection_type!=='A' || !entity.webhook_url) throw new Error('No type A webhook.');
       const url=loopbackUrl(entity.webhook_url);
       if (url.origin===this.replyBase) throw new Error('Webhook cannot target the trusted local control API.');
-      // WP-E1-02 sends only the explicit task goal. Private context retrieval and
-      // permission-filtered context assembly belong to WP-E1-03.
-      const context={goal:task.goal,facts:[],history_slice:[],source_refs:[],constraints:[],expected_output:{}};
+      const context=job.context;
       const response=await fetch(url,{method:'POST',redirect:'error',signal:abort.signal,
         headers:{'Content-Type':'application/json','Idempotency-Key':job.idempotency_key},
         body:JSON.stringify({task_id:task.id,kind:'task',context_package:context,idempotency_key:job.idempotency_key,

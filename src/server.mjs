@@ -3,6 +3,7 @@ import { authenticateEntity,listEntities } from './access.mjs';
 import { createTask,getTask,transitionTask } from './tasks.mjs';
 import { AppError } from './errors.mjs';
 import { demo } from './seed.mjs';
+import { decideApproval } from './approvals.mjs';
 
 async function json(req) {
   if (req.headers['content-type']?.split(';')[0].trim()!=='application/json') throw new AppError(415,'invalid_content_type','Use application/json.');
@@ -41,6 +42,9 @@ export function createApiServer(db,{localUserId=demo.user,localWorkspaceId=demo.
         const input=await json(req);
         // Caller cannot smuggle internal manualRetry/approvalDecision options.
         data=transitionTask(db,actor,decodeURIComponent(url.pathname.split('/')[3]),{to_state:input.to_state,reason:input.reason});
+      } else if(req.method==='POST' && /^\/v1\/tasks\/[^/]+\/(approve|reject)$/.test(url.pathname)) {
+        await json(req); // A decision has no caller-provided identity/grants.
+        data=decideApproval(db,actor,decodeURIComponent(url.pathname.split('/')[3]),url.pathname.endsWith('/approve')?'approved':'rejected');
       } else if (req.method==='GET' && url.pathname==='/v1/entities') {
         data=listEntities(db,actor,actor.kind==='entity'?actor.workspace_id:localWorkspaceId,url.searchParams.get('capability'));
       } else if (req.method==='GET' && /^\/v1\/entities\/[^/]+$/.test(url.pathname)) {

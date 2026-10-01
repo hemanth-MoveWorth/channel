@@ -2,6 +2,8 @@ import { randomUUID,createHash } from 'node:crypto';
 import { transaction } from './database.mjs';
 import { authorize } from './access.mjs';
 import { AppError } from './errors.mjs';
+import { contextInput,taskResource,evaluateTaskPlan } from './context.mjs';
+import { auditDecision } from './audit.mjs';
 
 export const transitions=Object.freeze({
   submitted:['queued','cancelled'], queued:['working','cancelled'],
@@ -20,13 +22,16 @@ export function rawTask(db,id) {
   return task;
 }
 export function publicTask(task) {
-  const {request_hash,...row}=task;
+  const {request_hash,context_input,...row}=task;
   return {...row,recipient_entity_ids:JSON.parse(row.recipient_entity_ids),result:row.result?JSON.parse(row.result):null};
 }
 export function getTask(db,actor,id) {
   const task=rawTask(db,id);
   authorize(db,actor,task.workspace_id,'tasks:read',{conversationId:task.conversation_id});
-  return publicTask(task);
+  const data=publicTask(task);
+  if(actor.kind==='human')data.approvals=db.prepare('SELECT id,action,status,attempt,decided_at,created_at FROM approvals WHERE task_id=? ORDER BY created_at,id').all(id)
+    .map(row=>({...row,action:JSON.parse(row.action)}));
+  return data;
 }
 export function recordEvent(db,task,eventType,fromState,toState,details={}) {
   db.prepare(`INSERT INTO task_events VALUES (?,?,?,?,?,?,?,?)`).run(randomUUID(),task.workspace_id,task.id,
@@ -59,7 +64,7 @@ export function move(db,task,toState,reason,{manualRetry=false,approvalDecision=
   recordEvent(db,task,'transition',task.state,toState,{reason:reason??null,attempt:nextAttempt});
   const updated=rawTask(db,task.id);
   if (toState==='queued') {
-    if (task.state==='failed') db.prepare("UPDATE tasks SET delivery_receipt='stored' WHERE id=?").run(task.id);
+    if (task.state==='failed') db.prepare("UPDATE tasks SET delivery_receipt='stored',blocked_reason=NULL WHERE id=?").run(task.id);
     enqueue(db,updated);
   }
   if (['completed','failed','cancelled'].includes(toState)) {
@@ -83,6 +88,7 @@ export function createTask(db,actor,body,idempotencyKey=randomUUID()) {
   authorize(db,actor,workspace,'tasks:create',{conversationId:conversation});
   if (!db.prepare('SELECT 1 FROM conversations WHERE id=? AND workspace_id=?').get(conversation,workspace)) throw new AppError(422,'invalid_request','Conversation is not in this workspace.');
   const goal=text(body.goal,'goal'); text(idempotencyKey,'Idempotency-Key');
+  const resource=taskResource(body);const context=contextInput(body.context_package);
   const supplied=body.recipient_entity_ids??[body.assigned_entity_id];
   if (!Array.isArray(supplied) || !supplied.length || supplied.length>100) throw new AppError(422,'invalid_request','Supply 1–100 recipient entity IDs.');
   const recipients=[...new Set(supplied.map(id=>text(id,'recipient entity ID')))].sort();
@@ -93,20 +99,32 @@ export function createTask(db,actor,body,idempotencyKey=randomUUID()) {
       throw new AppError(422,'invalid_request','Every recipient must be a member of this conversation.');
     }
   }
-  const requestHash=createHash('sha256').update(JSON.stringify([actor.kind,actor.user_id??actor.entity_id,workspace,conversation,goal,assigned,recipients])).digest('hex');
-  return transaction(db,()=>{
+  const requestHash=createHash('sha256').update(JSON.stringify([actor.kind,actor.user_id??actor.entity_id,workspace,conversation,goal,assigned,recipients,resource,context])).digest('hex');
+  const outcome=transaction(db,()=>{
     const prior=db.prepare('SELECT * FROM tasks WHERE workspace_id=? AND idempotency_key=?').get(workspace,idempotencyKey);
     if (prior) {
       if (prior.request_hash!==requestHash) throw new AppError(409,'idempotency_conflict','Idempotency-Key was already used for a different request.');
-      return {task:publicTask(prior),created:false};
+      auditDecision(db,{workspaceId:workspace,actor,taskId:prior.id,action:'task.replay',decision:prior.blocked_reason?'deny':'allow',reason:prior.blocked_reason??'idempotent_request'});
+      return prior.blocked_reason?{denied:prior.blocked_reason}:{task:publicTask(prior),created:false};
     }
     const id=randomUUID();
     db.prepare(`INSERT INTO tasks(id,workspace_id,conversation_id,requester_entity_id,created_by_user_id,assigned_entity_id,goal,
       idempotency_key,created_at,recipient_entity_ids,request_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id,workspace,conversation,
       actor.kind==='entity'?actor.entity_id:null,actor.kind==='human'?actor.user_id:null,assigned,goal,idempotencyKey,now(),JSON.stringify(recipients),requestHash);
     const task=rawTask(db,id);
+    db.prepare('UPDATE tasks SET resource_type=?,resource_id=?,action=?,context_input=? WHERE id=?')
+      .run(resource.resource_type,resource.resource_id,resource.action,JSON.stringify(context),id);
     recordEvent(db,task,'created',null,'submitted',{attempt:1});
     audit(db,task,actor,'task.create','submitted');
-    return {task:publicTask(move(db,task,'queued','task_created',{actor})),created:true};
+    const current=rawTask(db,id);const plan=evaluateTaskPlan(db,current);
+    if(plan.effect==='deny') {
+      db.prepare('UPDATE tasks SET blocked_reason=? WHERE id=?').run(plan.reason,id);
+      move(db,current,'cancelled',`permission_denied:${plan.reason}`,{actor});
+      return {denied:plan.reason};
+    }
+    return {task:publicTask(move(db,current,'queued','task_created',{actor})),created:true};
   });
+  // Keep denial audit/event records even when the HTTP request returns 403.
+  if(outcome.denied)throw new AppError(403,'permission_denied',`Request blocked: ${outcome.denied}.`);
+  return outcome;
 }
