@@ -5,6 +5,7 @@
   "type": "module",
   "engines": { "node": ">=22.13.0" },
   "scripts": {
+    "demo": "node scripts/demo.mjs",
     "start": "node scripts/server.mjs",
     "worker": "node scripts/worker.mjs",
     "db:migrate": "node scripts/migrate.mjs",

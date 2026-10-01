@@ -15,7 +15,7 @@ export function seed(db) {
       db.prepare(`INSERT INTO entities(id,workspace_id,owner_user_id,name,description,capabilities,connection_type)
         VALUES (?,?,?,?,?,?,'A') ON CONFLICT(id) DO NOTHING`).run(id,demo.workspace,demo.user,name,'Disconnected local demonstration profile.',JSON.stringify([skill]));
     }
-    db.prepare("INSERT INTO conversations VALUES (?,?,'group',?) ON CONFLICT(id) DO NOTHING").run(demo.group,demo.workspace,'Demo collaboration');
+    db.prepare("INSERT INTO conversations(id,workspace_id,kind,name,created_at) VALUES (?,?,'group',?,?) ON CONFLICT(id) DO NOTHING").run(demo.group,demo.workspace,'Demo collaboration',new Date().toISOString());
     for (const [id,orchestrator] of [[demo.research,1],[demo.writing,0]]) db.prepare(`INSERT INTO conversation_members VALUES (?,?,?,?)
       ON CONFLICT(conversation_id,entity_id) DO NOTHING`).run(demo.workspace,demo.group,id,orchestrator);
     return demo;

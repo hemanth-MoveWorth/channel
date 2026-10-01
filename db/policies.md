@@ -12,7 +12,7 @@ under `evidence/postgres/`, not active prototype dependencies.
 | Delete entity | Workspace owner | Denied |
 | Conversations/messages | Workspace members read/write | Conversation membership required |
 | Create tasks | Workspace member | Own workspace and conversation membership |
-| Change task state | Through task service only | Assigned entity only, through task service |
+| Change task state | Through task service only | Assigned entity; requester may cancel or resume input_required under ADR-005 |
 | Permission rules | Admin/owner manage | No self-grants |
 | Approval | Members read; admin/owner decide | Cannot approve own work |
 | Audit | Members read; service appends | No direct write/edit/delete |
@@ -33,3 +33,9 @@ creates a source grant. Full access and human approval cannot override a deny or
 missing private-source access. Decisions append audit records, including denied
 requests. No unfiltered context or credential read is exposed. Adding an endpoint
 must call authorization before reading data or mutating it. Unknown actions deny.
+
+ADR-005 dashboard task/approval lists are for authorized humans. Entity conversation
+and message reads are membership-scoped; results are attributed from bearer identity,
+never the supplied sender field. Task-linked messages must match the conversation.
+Requester input is a task-linked chat message followed by input_required → working;
+this never permits approval or completion of another entity's assigned task.

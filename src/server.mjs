@@ -4,6 +4,9 @@ import { createTask,getTask,transitionTask } from './tasks.mjs';
 import { AppError } from './errors.mjs';
 import { demo } from './seed.mjs';
 import { decideApproval } from './approvals.mjs';
+import { listTasks,listApprovals,listConversations,createConversation,listMessages,createMessage,inbox } from './dashboard.mjs';
+import { readFileSync } from 'node:fs';
+const assets=new Map([['/',['index.html','text/html; charset=utf-8']],['/app.js',['app.js','text/javascript; charset=utf-8']],['/style.css',['style.css','text/css; charset=utf-8']]]);
 
 async function json(req) {
   if (req.headers['content-type']?.split(';')[0].trim()!=='application/json') throw new AppError(415,'invalid_content_type','Use application/json.');
@@ -32,7 +35,28 @@ export function createApiServer(db,{localUserId=demo.user,localWorkspaceId=demo.
         actor=authenticateEntity(db,auth.slice(7));
       } else actor={kind:'human',user_id:localUserId}; // ADR-003 trusted loopback human UI.
       const url=new URL(req.url,base); let data; let status=200;
-      if (req.method==='POST' && url.pathname==='/v1/tasks') {
+      const workspace=actor.kind==='entity'?actor.workspace_id:localWorkspaceId;
+      if(req.method==='GET'&&assets.has(url.pathname)) {
+        const [file,type]=assets.get(url.pathname);
+        res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+          'Content-Security-Policy':"default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});
+        res.end(readFileSync(new URL(`../web/${file}`,import.meta.url)));return;
+      }
+      if(req.method==='GET'&&url.pathname==='/v1/tasks') {
+        data=listTasks(db,actor,workspace,url.searchParams);
+      } else if(req.method==='GET'&&url.pathname==='/v1/approvals') {
+        data=listApprovals(db,actor,workspace,url.searchParams.get('state')??'pending');
+      } else if(req.method==='GET'&&url.pathname==='/v1/conversations') {
+        data=listConversations(db,actor,workspace);
+      } else if(req.method==='POST'&&url.pathname==='/v1/conversations') {
+        data=createConversation(db,actor,workspace,await json(req));status=201;
+      } else if(/^\/v1\/conversations\/[^/]+\/messages$/.test(url.pathname)&&['GET','POST'].includes(req.method)) {
+        const id=decodeURIComponent(url.pathname.split('/')[3]);
+        if(req.method==='GET')data=listMessages(db,actor,workspace,id);
+        else {data=createMessage(db,actor,workspace,id,await json(req));status=201;}
+      } else if(req.method==='GET'&&url.pathname==='/v1/inbox') {
+        data=inbox(db,actor,workspace);
+      } else if (req.method==='POST' && url.pathname==='/v1/tasks') {
         const input=await json(req);
         const result=createTask(db,actor,input,req.headers['idempotency-key']); data=result.task;
         status=result.created?201:200;

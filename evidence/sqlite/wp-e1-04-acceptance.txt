@@ -1,0 +1,165 @@
+> signaldesk-channel@0.1.0 test
+> node --test --test-concurrency=1 tests/*.test.mjs
+
+TAP version 13
+# (node:15276) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: ask pauses with zero POSTs; human approval resumes; repeated approval and transport retry reuse one decision
+ok 1 - ask pauses with zero POSTs; human approval resumes; repeated approval and transport retry reuse one decision
+  ---
+  duration_ms: 267.4655
+  type: 'test'
+  ...
+# Subtest: entity and member cannot approve; rejection cancels durably and cannot later be approved
+ok 2 - entity and member cannot approve; rejection cancels durably and cannot later be approved
+  ---
+  duration_ms: 151.6095
+  type: 'test'
+  ...
+# Subtest: every recipient needs private-source access; authorized package includes only same-conversation history
+ok 3 - every recipient needs private-source access; authorized package includes only same-conversation history
+  ---
+  duration_ms: 129.698
+  type: 'test'
+  ...
+# Subtest: source grant revoked while awaiting approval blocks the approval without losing denial audit
+ok 4 - source grant revoked while awaiting approval blocks the approval without losing denial audit
+  ---
+  duration_ms: 109.2352
+  type: 'test'
+  ...
+# Subtest: explicit deny added after approval is rechecked before dispatch
+ok 5 - explicit deny added after approval is rechecked before dispatch
+  ---
+  duration_ms: 107.2016
+  type: 'test'
+  ...
+# Subtest: changed rule fingerprint makes an approval stale; a new attempt cannot reuse an earlier approval
+ok 6 - changed rule fingerprint makes an approval stale; a new attempt cannot reuse an earlier approval
+  ---
+  duration_ms: 127.3108
+  type: 'test'
+  ...
+# (node:12036) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: ADR-005 dashboard pagination, filters and approval lists preserve human/tenant boundary
+ok 7 - ADR-005 dashboard pagination, filters and approval lists preserve human/tenant boundary
+  ---
+  duration_ms: 237.8037
+  type: 'test'
+  ...
+# Subtest: conversation/message shapes, orchestrator selection, sender attribution and task result isolation
+ok 8 - conversation/message shapes, orchestrator selection, sender attribution and task result isolation
+  ---
+  duration_ms: 191.7025
+  type: 'test'
+  ...
+# Subtest: ADR-005 requester may cancel or resume input_required, never complete or approve another assignee task
+ok 9 - ADR-005 requester may cancel or resume input_required, never complete or approve another assignee task
+  ---
+  duration_ms: 159.1438
+  type: 'test'
+  ...
+# Subtest: dashboard serves only local static assets with content security policy
+ok 10 - dashboard serves only local static assets with content security policy
+  ---
+  duration_ms: 102.8737
+  type: 'test'
+  ...
+# (node:40380) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: ADR-004 precedence: deny, specificity, ask, priority, ties, no-match and malformed rules
+ok 11 - ADR-004 precedence: deny, specificity, ask, priority, ties, no-match and malformed rules
+  ---
+  duration_ms: 126.9682
+  type: 'test'
+  ...
+# Subtest: three modes are explicit rules; full access does not bypass deny or source grants
+ok 12 - three modes are explicit rules; full access does not bypass deny or source grants
+  ---
+  duration_ms: 82.115
+  type: 'test'
+  ...
+# Subtest: default deny blocks creation with a persisted reason, no job, and no lost audit on 403
+ok 13 - default deny blocks creation with a persisted reason, no job, and no lost audit on 403
+  ---
+  duration_ms: 65.3897
+  type: 'test'
+  ...
+# Subtest: only owner/admin grants; claimed ownership, group membership and chat cannot expose a private source
+ok 14 - only owner/admin grants; claimed ownership, group membership and chat cannot expose a private source
+  ---
+  duration_ms: 90.5237
+  type: 'test'
+  ...
+# (node:42068) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: WP-E1-01 SQLite migration, seed, persistence and application authorization
+ok 15 - WP-E1-01 SQLite migration, seed, persistence and application authorization
+  ---
+  duration_ms: 113.8292
+  type: 'test'
+  ...
+# SQLite file migrated, seeded twice, reopened; application denied and audited unauthorized access. No network or containers.
+# Subtest: migrate and seed CLIs use SIGNALDESK_DB_PATH and the documented default
+ok 16 - migrate and seed CLIs use SIGNALDESK_DB_PATH and the documented default
+  ---
+  duration_ms: 933.8336
+  type: 'test'
+  ...
+# (node:18960) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: ADR-003 transition matrix, event atomicity, manual retry and approval guard
+ok 17 - ADR-003 transition matrix, event atomicity, manual retry and approval guard
+  ---
+  duration_ms: 519.9038
+  type: 'test'
+  ...
+# Subtest: creation is idempotent, recipient list deduplicates, and explicit retry changes delivery scope
+ok 18 - creation is idempotent, recipient list deduplicates, and explicit retry changes delivery scope
+  ---
+  duration_ms: 74.2413
+  type: 'test'
+  ...
+# Subtest: task API JSON contract, cancel/stop, bearer identity and blocked approval bypass
+ok 19 - task API JSON contract, cancel/stop, bearer identity and blocked approval bypass
+  ---
+  duration_ms: 296.2074
+  type: 'test'
+  ...
+# (node:23996) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: kill after recipient commit before ACK, restart, one durable side effect, stable key
+ok 20 - kill after recipient commit before ACK, restart, one durable side effect, stable key
+  ---
+  duration_ms: 1039.1679
+  type: 'test'
+  ...
+# Killed real worker after recipient commit; replacement sent the same key twice overall, recipient committed one effect; logged ACK replay made no third POST.
+# Subtest: cancel API prevents pending delivery and surviving in-flight retry
+ok 21 - cancel API prevents pending delivery and surviving in-flight retry
+  ---
+  duration_ms: 181.7119
+  type: 'test'
+  ...
+# Subtest: non-ACK retries back off with same scope; concurrent claims cannot share a live lease
+ok 22 - non-ACK retries back off with same scope; concurrent claims cannot share a live lease
+  ---
+  duration_ms: 98.642
+  type: 'test'
+  ...
+# Subtest: recipient completion before ACK preserves terminal state and records delivery
+ok 23 - recipient completion before ACK preserves terminal state and records delivery
+  ---
+  duration_ms: 106.1486
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6758.892

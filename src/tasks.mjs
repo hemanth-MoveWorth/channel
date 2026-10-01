@@ -51,10 +51,10 @@ export function enqueue(db,task) {
 }
 // Internal mutation primitive. HTTP and entity callers must use transitionTask;
 // the worker uses this only after it has atomically claimed a persisted job.
-export function move(db,task,toState,reason,{manualRetry=false,approvalDecision=null,actor=null}={}) {
+export function move(db,task,toState,reason,{manualRetry=false,approvalDecision=null,cancelRequested=false,actor=null}={}) {
   if (!transitions[task.state]?.includes(toState)) throw new AppError(422,'invalid_transition',`Cannot transition from ${task.state} to ${toState}.`);
   if (task.state==='failed' && !manualRetry) throw new AppError(422,'manual_retry_required','A failed task can only be retried manually by the local human.');
-  if (task.state==='awaiting_approval') {
+  if (task.state==='awaiting_approval' && !(cancelRequested && toState==='cancelled')) {
     const required=toState==='working'?'approved':'rejected';
     if (approvalDecision!==required) throw new AppError(422,'approval_required','Use the approval service to decide this task.');
     if (required==='rejected') reason='approval_rejected';
@@ -75,12 +75,15 @@ export function move(db,task,toState,reason,{manualRetry=false,approvalDecision=
 }
 export function transitionTask(db,actor,id,{to_state,reason},options={}) {
   const task=rawTask(db,id);
-  authorize(db,actor,task.workspace_id,'tasks:control',{assignedEntityId:task.assigned_entity_id});
+  const requesterRight=actor.kind==='entity'&&actor.entity_id===task.requester_entity_id&&
+    (to_state==='cancelled'||(task.state==='input_required'&&to_state==='working'));
+  if(requesterRight)authorize(db,actor,task.workspace_id,'profiles:read');
+  else authorize(db,actor,task.workspace_id,'tasks:control',{assignedEntityId:task.assigned_entity_id});
   if (options.approvalDecision) authorize(db,actor,task.workspace_id,'approvals:decide');
   text(to_state,'to_state');
   if (reason!==undefined && reason!==null) text(reason,'reason');
   return transaction(db,()=>publicTask(move(db,rawTask(db,id),to_state,reason,
-    {manualRetry:actor.kind==='human',approvalDecision:options.approvalDecision,actor})));
+    {manualRetry:actor.kind==='human',approvalDecision:options.approvalDecision,cancelRequested:requesterRight&&to_state==='cancelled',actor})));
 }
 export function createTask(db,actor,body,idempotencyKey=randomUUID()) {
   const workspace=text(body.workspace_id,'workspace_id');

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "48fd5b2a-121c-4b86-804a-8b22577e96f5",
+    "goal": "Review the launch brief and report the word count",
+    "state": "completed",
+    "delivery_receipt": "accepted_for_execution",
+    "deliveries": 1,
+    "results": 1,
+    "approvals": [
+      "approved"
+    ]
+  },
+  {
+    "id": "03688b4b-8f4e-46ec-8bfc-ad66fd88d29b",
+    "goal": "Reject this acceptance request",
+    "state": "cancelled",
+    "delivery_receipt": "stored",
+    "deliveries": 0,
+    "results": 0,
+    "approvals": [
+      "rejected"
+    ]
+  },
+  {
+    "id": "aa85e14a-9b5d-4567-9a86-3458f213e046",
+    "goal": "Stop this acceptance request",
+    "state": "cancelled",
+    "delivery_receipt": "stored",
+    "deliveries": 0,
+    "results": 0,
+    "approvals": [
+      "rejected"
+    ]
+  }
+]
+(node:24456) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/seed.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/server.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/tasks.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/approvals-context.test.mjs', LF will be replaced by CRLF the next time Git touches it

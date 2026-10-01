@@ -50,3 +50,30 @@ The worker checks every recipient before sending, pauses ask decisions in
 Private sources require ownership, an explicit read grant, or shared visibility
 even in full-access mode. See [docs/PERMISSIONS.md](docs/PERMISSIONS.md) and
 [docs/WP-E1-03-REPORT.md](docs/WP-E1-03-REPORT.md) for behavior and acceptance evidence.
+
+## WP-E1-04 local dashboard
+
+`npm start` now serves the single-page dashboard at `http://127.0.0.1:3000`.
+It shows the entity directory, DMs/groups, task states and receipts, pending
+approvals, and Stop controls. Create a group and choose a type A orchestrator.
+Updates poll every two seconds; tasks and approvals are recovered from SQLite
+after reload. Result messages stay attached to their task in the conversation.
+
+For a complete, reproducible browser demo with local tools, run:
+
+```sh
+npm run demo
+```
+
+This starts the dashboard, worker and deterministic webhook tools on ports 3000
+and 3001. It uses a separate `./data/dashboard-demo.db` unless
+`SIGNALDESK_DB_PATH` is explicitly set. It configures ask mode and refreshes the
+demo entities' test credentials on each launch; credentials are never printed.
+Do not run it against a database whose demo configuration you want to preserve.
+Use it instead of running `npm start` and `npm run worker` separately.
+
+Create a request, wait for Needs approval, and click Approve. The local tool
+counts the goal's words, posts a task-linked result, and marks the task complete.
+Reject and Stop prevent dispatch. These are deterministic local tools, not live
+AI providers. See [docs/DASHBOARD-API.md](docs/DASHBOARD-API.md) for the implemented
+payload mapping and [docs/WP-E1-04-REPORT.md](docs/WP-E1-04-REPORT.md) for proof.

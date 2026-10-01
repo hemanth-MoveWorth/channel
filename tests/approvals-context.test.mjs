@@ -82,7 +82,7 @@ test('every recipient needs private-source access; authorized package includes o
     grantSource(f.db,f.owner,source.id,demo.writing);
     f.db.prepare('INSERT INTO messages(id,workspace_id,conversation_id,author_user_id,body,created_at) VALUES (?,?,?,?,?,?)')
       .run('real-message',demo.workspace,demo.group,demo.user,'Real conversation context',new Date().toISOString());
-    f.db.prepare("INSERT INTO conversations VALUES (?,?,'group','Other group')").run('other-group',demo.workspace);
+    f.db.prepare("INSERT INTO conversations(id,workspace_id,kind,name) VALUES (?,?,'group','Other group')").run('other-group',demo.workspace);
     f.db.prepare('INSERT INTO messages(id,workspace_id,conversation_id,author_user_id,body,created_at) VALUES (?,?,?,?,?,?)')
       .run('other-message',demo.workspace,'other-group',demo.user,'OTHER GROUP PRIVATE HISTORY',new Date().toISOString());
     const {task}=createTask(f.db,f.owner,body);await f.worker.tick();await f.worker.tick();
