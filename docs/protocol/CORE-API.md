@@ -77,7 +77,7 @@ There's no `rejected` state, because §2.4 freezes the state list. A rejection i
 | D1 | `submitted → awaiting_approval` when the assignee policy is *ask* | Not legal. `awaiting_approval` is entered only from `working`. |
 | D2 | `queued`/`input_required → awaiting_approval` (upward reclassify, hop or no-progress pause) | Only `working → awaiting_approval` |
 | D3 | Approve resumes to the paused-from state (`queued` if paused before start) | Approve resumes to `working` |
-| D4 | Human reject → `failed` (`approval_rejected`) | Human reject → `cancelled` (`approval_rejected`). This affects ADR-P3 and the A2A mapping: it would show as `TASK_STATE_CANCELED`, not `TASK_STATE_REJECTED`. |
+| D4 | ~~Human reject → `failed` (`approval_rejected`)~~ | Human reject → `cancelled` (`approval_rejected`). This affects ADR-P3 and the A2A mapping: it would show as `TASK_STATE_CANCELED`, not `TASK_STATE_REJECTED`. **Settled by ADR-005 §2:** ADR-003 kept (`cancelled`). |
 | D5 | `failed` reachable from `queued` (reject), `input_required` (fail), any non-terminal (runtime budget) | `failed` reachable only from `working` |
 | D6 | No retry edge | `failed → queued` (manual retry, new attempt and idempotency scope) |
 
@@ -106,5 +106,5 @@ Task state and receipts are separate. `accepted_for_execution` and the `queued �
 
 - `getTask` is in the core API but has no MCP tool (§2 doesn't list one). Requesters currently learn task state only through `check_inbox`. ADR-P5 proposes adding a `get_task` tool.
 - No `listPendingApprovals` on `AdminApi` yet. The UI (WP-E1-04) will need one, so Entity 1 should define it.
-- *(Added at rebase, 2026-10-01.)* ADR-003 §2 lists `POST /v1/tasks/:id/approve` and `/reject` under entity-key auth, with "the human UI is trusted locally". The security gate requires these to be unreachable with any entity key (SECURITY.md ADV-30, G6). Otherwise an agent could approve its own or a peer's paused task. Mow should confirm they're human-only.
+- *(Added at rebase, 2026-10-01.)* ADR-003 §2 lists `POST /v1/tasks/:id/approve` and `/reject` under entity-key auth, with "the human UI is trusted locally". The security gate requires these to be unreachable with any entity key (SECURITY.md ADV-30, G6). Otherwise an agent could approve its own or a peer's paused task. ~~Mow should confirm they're human-only.~~ **Settled by ADR-005 §1:** approve/reject are human-only and refuse any entity API key with 403 (amends ADR-003 §2).
 - Group semantics beyond membership aren't specified, for example whether only the orchestrator may assign tasks inside a group. The reference core lets any member assign. ADR-P6 proposes orchestrator-only assignment within groups, as an option chosen per group.

@@ -145,7 +145,7 @@ Legend: ☑ done and tested · ☐ open (owner)
 - ☑ HTTP: bearer on every request, session pinned to entity, Host/Origin allow-list, localhost bind, body cap
 - ☑ Secrets redacted from errors and logs
 - ☐ OAuth 2.1 (MCP authorization spec) for any non-localhost exposure (Entity 2, G2)
-- ☐ Human UI auth for every AdminApi operation: an app-layer human session in the prototype (ADR-002), Supabase Auth only once it enters (ADR-001 §1). Entity keys refused. (Entity 1, G6)
+- ☐ ~~Human UI auth for every AdminApi operation: an app-layer human session in the prototype (ADR-002), Supabase Auth only once it enters (ADR-001 §1). Entity keys refused.~~ *Re-scoped per Mow's ruling (2026-10-01) and ADR-005 §1.* Localhost prototype: "local UI trusted" is an accepted known gap. Hard requirement: `POST /v1/tasks/:id/approve` and `/reject` refuse every entity key with 403, verified by ADV-30 against Entity 1's real API. An authenticated human session is still required before any non-localhost exposure. (Entity 1, G6)
 
 **Capability verification**
 - ☑ Strict Agent Card schema. Self-granting fields rejected.
@@ -197,7 +197,7 @@ Legend: ☑ done and tested · ☐ open (owner)
 >    - **G3:** Webhook signing + SSRF guard for type A delivery, reviewed by Entity 2
 >    - **G4:** Exactly-once side effects across worker restart (WP-E1-02 acceptance), reviewed by Entity 2
 >    - **G5:** The context-package assembler enforces per-recipient clearance, and a crafted Entity X → Entity Y private-doc test is denied (WP-E1-03 acceptance)
->    - **G6:** AdminApi is reachable only through an authenticated human session, and the audit log is append-only
+>    - **G6:** ~~AdminApi is reachable only through an authenticated human session, and~~ the audit log is append-only. *Re-scoped per Mow's ruling (2026-10-01) and ADR-005 §1.* For the localhost prototype, "local UI trusted" is an accepted known gap, with the hard requirement that approve/reject refuse every entity key with 403, verified by ADV-30 against Entity 1's real API. An authenticated human session is still required before any non-localhost exposure.
 >    - **G2** (blocks exposure beyond localhost, e.g. tunnels or ChatGPT connectors): OAuth 2.1 for remote MCP
 >
 > Re-review starts as soon as Entity 1 delivers. Each gate closes with a dated entry below.
@@ -206,3 +206,4 @@ Legend: ☑ done and tested · ☐ open (owner)
 
 ### Gate log
 - 2026-10-01: E2 layer PASS (localhost). G1–G6 open.
+- 2026-10-01: G6 re-scoped for localhost per Mow's ruling and ADR-005 §1: entity keys get 403 on approve/reject, proven by ADV-30 against Entity 1's API. G6 still open until that test passes and the audit log is append-only.

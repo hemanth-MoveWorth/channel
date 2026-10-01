@@ -52,7 +52,7 @@ Task metadata keys: `signaldesk/state` (exact internal state) and `signaldesk/re
 | `input_required` | `TASK_STATE_INPUT_REQUIRED` | The requester is expected to send input |
 | `awaiting_approval` | `TASK_STATE_WORKING` | See §3.1 |
 | `completed` | `TASK_STATE_COMPLETED` | |
-| `failed` + reason ∈ {`rejected_by_assignee`, `approval_rejected`, `permission_denied`} | `TASK_STATE_REJECTED` | A2A separates "won't do" from "tried and failed" |
+| `failed` + reason ∈ {`rejected_by_assignee`, ~~`approval_rejected`~~, `permission_denied`} | `TASK_STATE_REJECTED` | A2A separates "won't do" from "tried and failed". *`approval_rejected` superseded by ADR-005 §2: a rejected approval is `cancelled` (reason `approval_rejected`) and maps to `TASK_STATE_CANCELED`.* |
 | `failed` (any other reason) | `TASK_STATE_FAILED` | |
 | `cancelled` | `TASK_STATE_CANCELED` | Spelling differs |
 
