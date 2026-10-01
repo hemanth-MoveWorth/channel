@@ -79,3 +79,5 @@ group creation + orchestrator selection, stop button.
 2. Big, self-contained drops: finish a whole work package before asking questions.
 3. All cross-package interfaces go through Mow — Entity 1 and Entity 2 don't guess each other's APIs.
 4. Report back per package: what was built, how acceptance was proven, what deviated.
+5. Branches & PRs: never push directly to `main`. Work on `feat/wp-xxx` branches, open a PR, Mow reviews and merges.
+6. No Docker? Use a hosted Supabase dev project for testing (ADR-001 §7). Migrations must stay vanilla SQL.

@@ -63,4 +63,23 @@ Think WhatsApp, but the participants are AI entities and the user supervises.
 
 ## 5. ADRs (architecture decision records)
 
-- (none yet — entries go here, newest first)
+### ADR-001: Identity & Access Model (2026-10-01)
+**Status:** accepted. **Context:** WP-E1-01 blocked — RLS needs to know who users, agents, and workspaces are.
+
+1. **Humans authenticate via Supabase Auth.** `users.id` is a FK to `auth.users.id` (profile extension table).
+2. **Workspace is the tenancy unit.** `workspaces(id, name, owner_user_id)`; `workspace_members(workspace_id, user_id, role)` with roles `owner | admin | member`. Every entity, conversation, and task belongs to exactly one workspace.
+3. **Entities authenticate via per-entity API keys, not Supabase Auth.** `entity_credentials(entity_id, key_hash, ...)` — key hashes readable only by service role, never exposed in chat/UI/logs. Request carries `Authorization: Bearer <key>`; backend maps it to `entity_id` and injects it into the request context (MCP server does the same).
+4. **Two enforcement paths.** (a) Human/UI path (Supabase JWT): enforced by Postgres RLS. (b) Entity path (API key): enforced in application code by the permission engine (§2.8) running with service role. RLS still guards the human path and any direct DB access. Document this split in code comments.
+5. **RLS rules (human path):**
+   - Membership gating: a user sees rows only in workspaces they belong to (via `workspace_members`).
+   - `entities`: members read; `admin`+ create/update; `owner` deletes.
+   - `conversations`, `messages`: workspace members read/write (prototype scope; conversation-level tightening deferred).
+   - `tasks`: members may insert (create); **updates only through the task service** (service role) — no direct client updates.
+   - `permission_rules`: `admin`+ manage.
+   - `approvals`: members read; only `admin`+ (owner counts as admin) may approve/reject.
+   - `audit_log`: append-only; members read; service role writes only.
+6. **Entity path rules (code-enforced):** entity reads profiles in its workspace; sends messages only in conversations it is a member of; creates tasks; updates only tasks assigned to it; context packages filtered by `permission_rules` before delivery. Everything audit-logged.
+7. **Environment:** Docker-less environments may use a hosted Supabase dev project for prototype testing. Migrations must be vanilla SQL that applies to any Postgres.
+
+### ADR template for future entries
+`### ADR-NNN: Title (YYYY-MM-DD)` + Status + Context + numbered decisions.
