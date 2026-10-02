@@ -1,0 +1,4 @@
+node_modules/
+.signaldesk-dev/
+.mcp.json
+*.log
