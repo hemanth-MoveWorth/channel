@@ -33,7 +33,7 @@ export function toA2AState(state: TaskState, reason?: TaskReason): { state: A2AT
       return { state: "TASK_STATE_WORKING", metadata };
     case "awaiting_approval":
       // The requester cannot resolve a human approval by sending input or credentials, so neither
-      // INPUT_REQUIRED nor AUTH_REQUIRED is truthful. WORKING tells the client to wait. (ADR-P3)
+      // INPUT_REQUIRED nor AUTH_REQUIRED is truthful. WORKING tells the client to wait. (ADR-008)
       return { state: "TASK_STATE_WORKING", metadata };
     case "input_required":
       return { state: "TASK_STATE_INPUT_REQUIRED", metadata };
@@ -57,8 +57,8 @@ export function fromA2AState(a2a: A2ATaskState): { state: TaskState; reason?: Ta
       return { state: "input_required" };
     case "TASK_STATE_AUTH_REQUIRED":
       // The remote agent needs credentials/consent; only a human can provide those. Never forward secrets in chat (§2.8).
-      // ADR-008's closed reason enum has no fitting value, so no reason is attached (flagged to Mow).
-      return { state: "awaiting_approval" };
+      // Mow's ruling on ADR-008 (2026-10-02): reuse policy_requires_approval from the closed enum.
+      return { state: "awaiting_approval", reason: "policy_requires_approval" };
     case "TASK_STATE_COMPLETED":
       return { state: "completed" };
     case "TASK_STATE_FAILED":

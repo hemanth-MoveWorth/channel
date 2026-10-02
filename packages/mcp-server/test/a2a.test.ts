@@ -60,7 +60,7 @@ describe("Task state mapping", () => {
       }
       expect(TASK_STATES).toContain(fromA2AState(a).state);
     }
-    expect(fromA2AState("TASK_STATE_AUTH_REQUIRED")).toEqual({ state: "awaiting_approval" });
+    expect(fromA2AState("TASK_STATE_AUTH_REQUIRED")).toEqual({ state: "awaiting_approval", reason: "policy_requires_approval" });
     expect(fromA2AState("TASK_STATE_REJECTED")).toEqual({ state: "cancelled", reason: "rejected_by_assignee" });
     for (const a of A2A_TASK_STATES.filter((x) => x !== "TASK_STATE_UNSPECIFIED")) {
       const r = fromA2AState(a).reason;

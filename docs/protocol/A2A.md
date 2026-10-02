@@ -63,7 +63,7 @@ Task metadata keys: `signaldesk/state` (exact internal state) and `signaldesk/re
 | `TASK_STATE_SUBMITTED` | `submitted` | |
 | `TASK_STATE_WORKING` | `working` | |
 | `TASK_STATE_INPUT_REQUIRED` | `input_required` | |
-| `TASK_STATE_AUTH_REQUIRED` | `awaiting_approval` (~~`external_auth_required`~~ no reason) | Only a human can supply credentials. They are never relayed in chat (§2.8). *(ADR alignment, 2026-10-02.)* ADR-008 §1's closed reason enum has no fitting value, so no reason is attached. Flagged to Mow. |
+| `TASK_STATE_AUTH_REQUIRED` | `awaiting_approval` (~~`external_auth_required`~~ ~~no reason~~ `policy_requires_approval`) | Only a human can supply credentials. They are never relayed in chat (§2.8). ~~*(ADR alignment, 2026-10-02.)* ADR-008 §1's closed reason enum has no fitting value, so no reason is attached. Flagged to Mow.~~ **Settled by Mow (2026-10-02):** use `policy_requires_approval` from the closed ADR-008 enum. No new reason. |
 | `TASK_STATE_COMPLETED` | `completed` | |
 | `TASK_STATE_FAILED` | `failed` (`assignee_reported_failure`) | |
 | `TASK_STATE_REJECTED` | ~~`failed` (`rejected_by_assignee`)~~ `cancelled` (`rejected_by_assignee`) | ADR-008 §2: an agent declining is cancelled, not failed. |
