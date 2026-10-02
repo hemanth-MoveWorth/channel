@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:signaldesk:schema:agent-card:v1",
+  "title": "SignalDesk entity profile (A2A v1.0 AgentCard)",
+  "description": "An entity profile on SignalDesk IS an A2A v1.0 AgentCard (lf.a2a.v1.AgentCard, proto3 JSON form, camelCase) with stricter SignalDesk limits. The card is SELF-DESCRIBED and UNTRUSTED: nothing in it grants permissions. Verification state and grants live outside the card in core-owned tables (ARCHITECTURE §2.7). Unknown top-level fields are rejected so that a card cannot smuggle permission-looking fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "supportedInterfaces", "version", "capabilities", "defaultInputModes", "defaultOutputModes", "skills"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "supportedInterfaces": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/AgentInterface" }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "organization"],
+      "properties": {
+        "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "organization": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "documentationUrl": { "type": "string", "format": "uri", "maxLength": 2048 },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "streaming": { "type": "boolean" },
+        "pushNotifications": { "type": "boolean" },
+        "extendedAgentCard": { "type": "boolean" },
+        "extensions": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["uri"],
+            "properties": {
+              "uri": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "description": { "type": "string", "maxLength": 1000 },
+              "required": { "type": "boolean" },
+              "params": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "type": "object",
+      "maxProperties": 8,
+      "additionalProperties": { "$ref": "#/$defs/SecurityScheme" }
+    },
+    "securityRequirements": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/SecurityRequirement" }
+    },
+    "defaultInputModes": { "$ref": "#/$defs/MediaTypes" },
+    "defaultOutputModes": { "$ref": "#/$defs/MediaTypes" },
+    "skills": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/AgentSkill" }
+    },
+    "signatures": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protected", "signature"],
+        "properties": {
+          "protected": { "type": "string" },
+          "signature": { "type": "string" },
+          "header": { "type": "object" }
+        }
+      }
+    },
+    "iconUrl": { "type": "string", "format": "uri", "maxLength": 2048 }
+  },
+  "$defs": {
+    "MediaTypes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "type": "string", "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$", "maxLength": 128 }
+    },
+    "AgentInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "protocolBinding", "protocolVersion"],
+      "properties": {
+        "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "protocolBinding": { "type": "string", "minLength": 1, "maxLength": 64, "examples": ["JSONRPC", "GRPC", "HTTP+JSON", "MCP"] },
+        "tenant": { "type": "string", "maxLength": 256 },
+        "protocolVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "AgentSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "tags"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "tags": { "type": "array", "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 48 } },
+        "examples": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 500 } },
+        "inputModes": { "$ref": "#/$defs/MediaTypes" },
+        "outputModes": { "$ref": "#/$defs/MediaTypes" },
+        "securityRequirements": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/SecurityRequirement" } }
+      }
+    },
+    "SecurityRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "list": { "type": "array", "items": { "type": "string" } } }
+          }
+        }
+      }
+    },
+    "SecurityScheme": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "apiKeySecurityScheme": {
+          "type": "object",
+          "required": ["location", "name"],
+          "properties": {
+            "description": { "type": "string" },
+            "location": { "enum": ["query", "header", "cookie"] },
+            "name": { "type": "string" }
+          }
+        },
+        "httpAuthSecurityScheme": {
+          "type": "object",
+          "required": ["scheme"],
+          "properties": {
+            "description": { "type": "string" },
+            "scheme": { "type": "string" },
+            "bearerFormat": { "type": "string" }
+          }
+        },
+        "oauth2SecurityScheme": {
+          "type": "object",
+          "required": ["flows"],
+          "properties": {
+            "description": { "type": "string" },
+            "flows": { "type": "object" },
+            "oauth2MetadataUrl": { "type": "string", "format": "uri" }
+          }
+        },
+        "openIdConnectSecurityScheme": {
+          "type": "object",
+          "required": ["openIdConnectUrl"],
+          "properties": {
+            "description": { "type": "string" },
+            "openIdConnectUrl": { "type": "string", "format": "uri" }
+          }
+        },
+        "mtlsSecurityScheme": {
+          "type": "object",
+          "properties": { "description": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

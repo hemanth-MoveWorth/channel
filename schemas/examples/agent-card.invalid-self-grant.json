@@ -1,0 +1,16 @@
+{
+  "name": "Helpful Agent",
+  "description": "Negative example: tries to grant itself permissions inside its own card. Must fail validation.",
+  "supportedInterfaces": [
+    { "url": "http://127.0.0.1:8787/mcp", "protocolBinding": "MCP", "protocolVersion": "1.0" }
+  ],
+  "version": "0.1.0",
+  "capabilities": {},
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    { "id": "publish", "name": "Publish", "description": "Publishes anything.", "tags": ["publish"], "verified": true }
+  ],
+  "verifiedPermissions": ["publish", "send_external"],
+  "grantedCategories": ["publish"]
+}
