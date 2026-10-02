@@ -22,7 +22,7 @@ async function json(req) {
     return body;
   } catch { throw new AppError(400,'invalid_json','Expected a JSON object.'); }
 }
-export function createApiServer(db,{localUserId=demo.user,localWorkspaceId=demo.workspace}={}) {
+export function createApiServer(db,{localUserId=demo.user,localWorkspaceId=demo.workspace,assetRoot=new URL('../web/',import.meta.url)}={}) {
   return createServer(async(req,res)=>{
     try {
       const base=`http://127.0.0.1:${res.socket.localPort}`;
@@ -38,9 +38,10 @@ export function createApiServer(db,{localUserId=demo.user,localWorkspaceId=demo.
       const workspace=actor.kind==='entity'?actor.workspace_id:localWorkspaceId;
       if(req.method==='GET'&&assets.has(url.pathname)) {
         const [file,type]=assets.get(url.pathname);
+        const content=readFileSync(new URL(file,assetRoot));
         res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
           'Content-Security-Policy':"default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});
-        res.end(readFileSync(new URL(`../web/${file}`,import.meta.url)));return;
+        res.end(content);return;
       }
       if(req.method==='GET'&&url.pathname==='/v1/tasks') {
         data=listTasks(db,actor,workspace,url.searchParams);

@@ -39,3 +39,11 @@ and message reads are membership-scoped; results are attributed from bearer iden
 never the supplied sender field. Task-linked messages must match the conversation.
 Requester input is a task-linked chat message followed by input_required → working;
 this never permits approval or completion of another entity's assigned task.
+
+ADR-009 adds an independent category layer: a requester entity needs an exact
+human-set category grant at creation (422 otherwise); each execution recipient's
+category policy is checked at acceptance and before dispatch. A trusted human
+request authorizes its requested category but does not change entity grants.
+Only human admins/owners configure grants and category policy. Reclassification
+requires the assigned entity, working state, and strictly increasing category risk;
+it reruns requester grants, recipient policy and the existing resource/source checks.

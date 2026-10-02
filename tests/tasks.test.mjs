@@ -16,7 +16,7 @@ test('ADR-003 transition matrix, event atomicity, manual retry and approval guar
       const before=f.db.prepare('SELECT count(*) AS n FROM task_events WHERE task_id=?').get(task.id).n;
       const options=from==='awaiting_approval'?{approvalDecision:to==='working'?'approved':'rejected'}:{};
       if (transitions[from].includes(to)) {
-        const result=transitionTask(f.db,f.owner,task.id,{to_state:to,reason:'matrix'},options);
+        const result=transitionTask(f.db,f.owner,task.id,{to_state:to},options);
         assert.equal(result.state,to);
         assert.equal(result.attempt,from==='failed'?2:1);
         assert.equal(f.db.prepare('SELECT count(*) AS n FROM task_events WHERE task_id=?').get(task.id).n,before+1);
@@ -24,7 +24,7 @@ test('ADR-003 transition matrix, event atomicity, manual retry and approval guar
         assert.ok(event);
         if (from==='awaiting_approval' && to==='cancelled') assert.equal(JSON.parse(event.details).reason,'approval_rejected');
       } else {
-        assert.throws(()=>transitionTask(f.db,f.owner,task.id,{to_state:to,reason:'matrix'},options),e=>e.status===422);
+        assert.throws(()=>transitionTask(f.db,f.owner,task.id,{to_state:to},options),e=>e.status===422);
         assert.equal(getTask(f.db,f.owner,task.id).state,from);
         assert.equal(f.db.prepare('SELECT count(*) AS n FROM task_events WHERE task_id=?').get(task.id).n,before);
       }
@@ -74,7 +74,7 @@ test('task API JSON contract, cancel/stop, bearer identity and blocked approval 
     assert.equal(replay.status,200);assert.equal(replay.body.data.id,id);
     const invalid=await api(`/v1/tasks/${id}/transition`,{method:'POST',body:{to_state:'completed'}});
     assert.equal(invalid.status,422);assert.equal(invalid.body.error.code,'invalid_transition');
-    const cancelled=await api(`/v1/tasks/${id}/transition`,{method:'POST',body:{to_state:'cancelled',reason:'user_stop'}});
+    const cancelled=await api(`/v1/tasks/${id}/transition`,{method:'POST',body:{to_state:'cancelled',reason:'stopped_by_user'}});
     assert.equal(cancelled.status,200);assert.equal(cancelled.body.data.state,'cancelled');
     assert.equal(f.db.prepare("SELECT count(*) AS n FROM job_queue WHERE status='cancelled'").get().n,1);
     assert.equal((await api(`/v1/tasks/${id}`)).body.data.state,'cancelled');

@@ -139,7 +139,7 @@ test('changed rule fingerprint makes an approval stale; a new attempt cannot reu
     assert.equal((await f.request(`/v1/tasks/${stale.id}/approve`)).status,409);
     assert.equal((await f.request(`/v1/tasks/${stale.id}/reject`)).status,200);
     const {task}=createTask(f.db,f.owner,f.body);await f.worker.tick();await f.request(`/v1/tasks/${task.id}/approve`);
-    transitionTask(f.db,f.owner,task.id,{to_state:'failed',reason:'manual_acceptance_failure'});
+    transitionTask(f.db,f.owner,task.id,{to_state:'failed',reason:'assignee_reported_failure'});
     transitionTask(f.db,f.owner,task.id,{to_state:'queued'});await f.worker.tick();
     assert.equal(getTask(f.db,f.owner,task.id).attempt,2);assert.equal(getTask(f.db,f.owner,task.id).state,'awaiting_approval');
     const decisions=f.db.prepare('SELECT status,attempt FROM approvals WHERE task_id=? ORDER BY attempt').all(task.id);

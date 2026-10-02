@@ -28,7 +28,7 @@ export function decideApproval(db,actor,taskId,decision) {
     }
     db.prepare('UPDATE approvals SET status=?,decided_by_user_id=?,decided_at=? WHERE id=?').run(decision,actor.user_id,new Date().toISOString(),pending.id);
     auditDecision(db,{workspaceId:current.workspace_id,actor,taskId,action:`approval.${decision}`,decision:decision==='approved'?'allow':'deny',reason:decision==='approved'?'human_approved':'approval_rejected'});
-    return {task:publicTask(move(db,current,decision==='approved'?'working':'cancelled',decision==='approved'?'human_approved':'approval_rejected',{approvalDecision:decision,actor}))};
+    return {task:publicTask(move(db,current,decision==='approved'?'working':'cancelled',decision==='approved'?null:'approval_rejected',{approvalDecision:decision,actor}))};
   });
   // Throw after commit so denied and stale decisions are not lost on rollback.
   if(outcome.error)throw outcome.error;

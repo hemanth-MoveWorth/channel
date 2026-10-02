@@ -3,6 +3,7 @@ import { evaluatePermission,resourceTypes,actions } from './permissions.mjs';
 import { sourceAccess } from './sources.mjs';
 import { auditDecision } from './audit.mjs';
 import { AppError } from './errors.mjs';
+import { requesterCategory,assigneeCategory } from './categories.mjs';
 
 export function contextInput(value={}) {
   if(!value || typeof value!=='object' || Array.isArray(value))throw new AppError(422,'invalid_context','Context must be an object.');
@@ -23,9 +24,11 @@ export function taskResource(body) {
 }
 // Evaluate all recipients before dispatching any: an ask or deny cannot be
 // bypassed by selecting an earlier, less restricted queue recipient.
-export function evaluateTaskPlan(db,task) {
+export function evaluateTaskPlan(db,task,{includeCategories=true}={}) {
   const input=contextInput(JSON.parse(task.context_input));
   const checks=[];const packages={};
+  if(includeCategories)checks.push(requesterCategory(db,task.requester_entity_id?
+    {kind:'entity',entity_id:task.requester_entity_id}:{kind:'human',user_id:task.created_by_user_id},task.workspace_id,task.category,task.id));
   const messages=db.prepare(`SELECT id,body,sender_entity_id,author_user_id FROM messages
     WHERE workspace_id=? AND conversation_id=? ORDER BY created_at DESC,id DESC LIMIT 20`).all(task.workspace_id,task.conversation_id).reverse();
   for(const recipient of JSON.parse(task.recipient_entity_ids)) {
@@ -35,6 +38,7 @@ export function evaluateTaskPlan(db,task) {
       auditDecision(db,{workspaceId:task.workspace_id,actor:{kind:'entity',entity_id:recipient},taskId:task.id,action:'context.membership',decision:'deny',reason:'recipient_not_conversation_member'});
       continue;
     }
+    if(includeCategories)checks.push(assigneeCategory(db,task.workspace_id,recipient,task.category,task.id));
     const permission=(resourceType,resourceId,action)=>{
       const result=evaluatePermission(db,{workspaceId:task.workspace_id,subjectEntityId:recipient,resourceType,resourceId,action,taskId:task.id});
       checks.push(result);return result;
@@ -54,7 +58,7 @@ export function evaluateTaskPlan(db,task) {
   }
   const denied=checks.find(c=>c.effect==='deny');const asks=checks.filter(c=>c.effect==='ask');
   const effect=denied?'deny':asks.length?'ask':'allow';
-  const fingerprint=createHash('sha256').update(JSON.stringify({attempt:task.attempt,goal:task.goal,input,checks})).digest('hex');
+  const fingerprint=createHash('sha256').update(JSON.stringify({attempt:task.attempt,category:task.category,goal:task.goal,input,checks})).digest('hex');
   return {effect,reason:denied?.reason??(asks.length?'human_approval_required':'permission_allowed'),checks,asks,fingerprint,packages};
 }
 export function executionGate(db,task) {

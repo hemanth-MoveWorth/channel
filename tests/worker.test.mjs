@@ -81,7 +81,7 @@ test('cancel API prevents pending delivery and surviving in-flight retry',async(
     const worker=new Worker(f.db,{replyBase:base,timeoutMs:300,leaseMs:500,pollMs:20,backoffMs:20});
     const pending=createTask(f.db,f.owner,f.body).task;
     const cancel=async id=>{
-      const response=await fetch(`${base}/v1/tasks/${id}/transition`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_state:'cancelled',reason:'user_stop'})});
+      const response=await fetch(`${base}/v1/tasks/${id}/transition`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_state:'cancelled',reason:'stopped_by_user'})});
       assert.equal(response.status,200);assert.equal((await response.json()).data.state,'cancelled');
     };
     await cancel(pending.id);assert.equal(await worker.tick(),false);assert.equal(hits,0);
@@ -122,7 +122,7 @@ test('recipient completion before ACK preserves terminal state and records deliv
     const chunks=[];for await(const chunk of req)chunks.push(chunk);
     const payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));
     const callback=await fetch(payload.reply_to,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer callback-test-key'},
-      body:JSON.stringify({to_state:'completed',reason:'local_result_ready'})});
+      body:JSON.stringify({to_state:'completed'})});
     callbackStatus=callback.status;await callback.json();
     res.writeHead(200,{'Content-Type':'application/json'});res.end('{"accepted":true}');
   });

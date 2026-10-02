@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { transaction } from './database.mjs';
-import { move,rawTask,recordEvent,now } from './tasks.mjs';
-import { executionGate } from './context.mjs';
+import { move,rawTask,recordEvent,now,enforceExecution } from './tasks.mjs';
 
 export function loopbackUrl(value) {
   const url=new URL(value);
@@ -29,23 +28,14 @@ export class Worker {
       db.prepare("UPDATE job_queue SET status='leased',lease_token=?,lease_until=?,tries=tries+1 WHERE id=?")
         .run(token,time+this.leaseMs,job.id);
       let task=rawTask(db,job.task_id);
-      if (task.state==='queued') task=move(db,task,'working','worker_claimed');
+      if (task.state==='queued') task=move(db,task,'working',null);
       const delivered=db.prepare("SELECT 1 FROM deliveries WHERE idempotency_key=? AND status='delivered'").get(job.idempotency_key);
       if (delivered) {
         db.prepare("UPDATE job_queue SET status='done',lease_token=NULL,lease_until=NULL WHERE id=?").run(job.id);
         return {skipped:true};
       }
-      const gate=executionGate(db,task);
-      if(gate.effect==='deny') {
-        db.prepare('UPDATE tasks SET blocked_reason=? WHERE id=?').run(gate.reason,task.id);
-        move(db,task,'failed',`permission_denied:${gate.reason}`);
-        return {skipped:true};
-      }
-      if(gate.effect==='ask') {
-        move(db,task,'awaiting_approval','human_approval_required');
-        db.prepare("UPDATE job_queue SET status='pending',lease_token=NULL,lease_until=NULL WHERE task_id=? AND status='leased'").run(task.id);
-        return {skipped:true};
-      }
+      const gate=enforceExecution(db,task);
+      if(gate.effect!=='allow')return {skipped:true};
       db.prepare(`INSERT INTO deliveries VALUES (?,?,?,?,'pending',NULL,?) ON CONFLICT(idempotency_key) DO NOTHING`)
         .run(job.idempotency_key,job.task_id,job.action,job.recipient_entity_id,now());
       return {...job,lease_token:token,tries:job.tries+1,task,context:gate.packages[job.recipient_entity_id]};

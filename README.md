@@ -77,3 +77,16 @@ counts the goal's words, posts a task-linked result, and marks the task complete
 Reject and Stop prevent dispatch. These are deterministic local tools, not live
 AI providers. See [docs/DASHBOARD-API.md](docs/DASHBOARD-API.md) for the implemented
 payload mapping and [docs/WP-E1-04-REPORT.md](docs/WP-E1-04-REPORT.md) for proof.
+
+## Review follow-ups: ADR-008 and ADR-009
+
+Tasks now require an explicit category. New entities default to research-only
+requester grants and ask-every-time category policy. These checks coexist with
+ADR-004 resource rules; neither layer grants access through the other. The UI
+includes category selection and displays task category/reason.
+
+Migration 005 adds category settings and the closed TaskReason field. Existing
+uncategorized tasks cannot resume execution under guessed categories; create a
+new explicitly categorized request. Restart API/worker processes after migrating.
+See [the reconciliation report](docs/RECONCILIATION-ADR008-009.md) for acceptance
+proof and the internal adapter functions. G3 webhook signing remains open.

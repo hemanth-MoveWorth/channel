@@ -20,6 +20,7 @@ this is not public/SaaS authentication.
   "workspace_id": "10000000-0000-4000-8000-000000000001",
   "conversation_id": "30000000-0000-4000-8000-000000000001",
   "assigned_entity_id": "20000000-0000-4000-8000-000000000001",
+  "category": "research",
   "recipient_entity_ids": ["20000000-0000-4000-8000-000000000001"],
   "goal": "Perform a local task"
 }
@@ -46,7 +47,7 @@ verified permission, caller-supplied history, or execution result is accepted at
 `POST /v1/tasks/:id/transition` accepts exactly the documented state and reason:
 
 ```json
-{"to_state":"cancelled","reason":"user_stop"}
+{"to_state":"cancelled","reason":"stopped_by_user"}
 ```
 
 The human acts within their workspace; an entity can mutate only its assigned
@@ -111,3 +112,16 @@ waiting HTTP request is aborted, and restart cannot deliver cancelled jobs.
 An effect committed before cancellation cannot be recalled. The tests prove
 zero sends for a pending cancelled task and no retry of an in-flight cancelled
 task. External services, recipient APIs and live AI providers are not involved.
+
+## ADR-008/009 reconciliation
+
+Creation requires a declared category. Missing/invalid categories or a missing
+requester entity grant return 422. The assignee's category policy is checked at
+acceptance (`queued -> working` through this API or worker claim), then alongside
+ADR-004 checks before dispatch. Deny fails with permission_denied; ask pauses with
+policy_requires_approval. Category and reason are included in public task reads.
+
+Transition reason is optional/null or an exact ADR-008 TaskReason; arbitrary text
+and old user_stop strings return 422. Successful transitions without an exceptional
+reason use null. Human approval clears the pause reason. See RECONCILIATION-ADR008-009.md
+for exact enums, admin helpers, reclassification, and migration behavior.

@@ -56,12 +56,12 @@ test('ADR-005 requester may cancel or resume input_required, never complete or a
     transitionTask(f.db,f.owner,task.id,{to_state:'working'});transitionTask(f.db,f.owner,task.id,{to_state:'input_required'});
     assert.equal((await f.request(`/v1/tasks/${task.id}/transition`,{to_state:'completed'},'writing-key')).status,403);
     assert.equal((await f.request(`/v1/conversations/${demo.group}/messages`,{kind:'chat',task_id:task.id,body:'Here is the requested clarification'},'writing-key')).status,201);
-    assert.equal((await f.request(`/v1/tasks/${task.id}/transition`,{to_state:'working',reason:'Clarification supplied'},'writing-key')).status,200);
+    assert.equal((await f.request(`/v1/tasks/${task.id}/transition`,{to_state:'working'},'writing-key')).status,200);
     transitionTask(f.db,f.owner,task.id,{to_state:'awaiting_approval'});
     for(const key of ['research-key','writing-key'])for(const decision of ['approve','reject'])assert.equal((await f.request(`/v1/tasks/${task.id}/${decision}`,{},key)).status,403);
-    assert.equal((await f.request(`/v1/tasks/${task.id}/transition`,{to_state:'cancelled',reason:'requester_stop'},'writing-key')).status,200);
+    assert.equal((await f.request(`/v1/tasks/${task.id}/transition`,{to_state:'cancelled',reason:'stopped_by_user'},'writing-key')).status,200);
     assert.equal(getTask(f.db,f.owner,task.id).state,'cancelled');assert.equal(await new Worker(f.db).tick(),false);
-    assert.ok(f.db.prepare("SELECT 1 FROM audit_log WHERE actor_entity_id=? AND action='task.transition' AND reason='requester_stop'").get(demo.writing));
+    assert.ok(f.db.prepare("SELECT 1 FROM audit_log WHERE actor_entity_id=? AND action='task.transition' AND reason='stopped_by_user'").get(demo.writing));
   }finally{await f.finish();}
 });
 

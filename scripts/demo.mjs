@@ -28,7 +28,7 @@ const recipient=createServer(async(req,res)=>{try{
     await request(`/v1/conversations/${task.conversation_id}/messages`,key,{kind:'task_result',task_id:task.id,
       body:`Local tool result: counted ${context.goal.trim().split(/\s+/).length} words in your request. Received ${context.history_slice.length} conversation messages and ${context.source_refs.length} authorized source references.\nGoal: ${context.goal}`});
   }
-  if(task.state==='working')await request(`/v1/tasks/${task.id}/transition`,key,{to_state:'completed',reason:'local_tool_result_posted'});
+  if(task.state==='working')await request(`/v1/tasks/${task.id}/transition`,key,{to_state:'completed'});
   res.writeHead(200,{'Content-Type':'application/json'});res.end('{"accepted":true}');
 }catch{res.writeHead(503);res.end();}});
 const api=createApiServer(db);const controller=new AbortController();

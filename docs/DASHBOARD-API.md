@@ -52,7 +52,7 @@ another assignee's task. Requester cancellation records a task stop, not a human
 approval decision. Both approve and reject endpoints reject every entity key.
 
 The human Stop button uses reject for awaiting_approval, otherwise the cancelled
-transition with user_stop. This preserves ADR-003's approval_rejected reason.
+transition with stopped_by_user. This preserves ADR-003's approval_rejected reason.
 Result messages and current task state survive browser reload and process restart.
 
 ## Inbox and remaining integration
