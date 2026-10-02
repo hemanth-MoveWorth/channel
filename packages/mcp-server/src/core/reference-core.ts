@@ -16,7 +16,9 @@ import {
   type ConversationView,
   CoreError,
   type EntityPublicProfile,
+  type GroupAssignment,
   type InboxItem,
+  LEGAL_TRANSITIONS,
   type MessageView,
   type Part,
   type ReceiptState,
@@ -62,6 +64,7 @@ interface ConversationRec {
   name?: string;
   members: Set<string>;
   orchestratorId?: string;
+  assignment?: GroupAssignment;
 }
 
 interface MessageRec extends MessageView {
@@ -71,8 +74,6 @@ interface MessageRec extends MessageView {
 interface TaskRec extends Omit<TaskView, "deadline"> {
   deadlineMs: number;
   turnsWithoutProgress: number;
-  /** State to return to when an approval pause is approved. */
-  resumeState?: TaskState;
   originMessageId: string;
 }
 
@@ -178,17 +179,30 @@ export class ReferenceCore implements CoreApi, AdminApi {
     this.log("human", "approval_mode.set", entityId, undefined, mode.kind);
   }
 
-  async createGroup(input: { workspaceId: string; name: string; memberIds: string[]; orchestratorId?: string }) {
+  async createGroup(input: { workspaceId: string; name: string; memberIds: string[]; orchestratorId?: string; assignment?: GroupAssignment }) {
     const members = new Set(input.memberIds);
     for (const m of members) if (this.mustEntity(m).workspaceId !== input.workspaceId) throw new CoreError("forbidden", "member from another workspace");
     if (input.orchestratorId) {
       if (!members.has(input.orchestratorId)) throw new CoreError("invalid_input", "orchestrator must be a member");
       if (this.mustEntity(input.orchestratorId).connectionType !== "A") throw new CoreError("invalid_input", "only type A entities can orchestrate (ARCHITECTURE §2.3)");
     }
+    // ADR-011 §1: default orchestrator_only when an orchestrator is set, otherwise any_member.
+    const assignment = input.assignment ?? (input.orchestratorId ? "orchestrator_only" : "any_member");
+    if (assignment === "orchestrator_only" && !input.orchestratorId) throw new CoreError("invalid_input", "orchestrator_only requires an orchestrator");
     const conversationId = id("conv");
-    this.conversations.set(conversationId, { id: conversationId, workspaceId: input.workspaceId, kind: "group", name: input.name, members, orchestratorId: input.orchestratorId });
-    this.log("human", "group.create", conversationId);
+    this.conversations.set(conversationId, { id: conversationId, workspaceId: input.workspaceId, kind: "group", name: input.name, members, orchestratorId: input.orchestratorId, assignment });
+    this.log("human", "group.create", conversationId, undefined, `assignment=${assignment}`);
     return { conversationId };
+  }
+
+  async updateGroup(conversationId: string, input: { assignment: GroupAssignment }) {
+    const c = this.conversations.get(conversationId);
+    if (!c || c.kind !== "group") throw new CoreError("not_found", "group not found");
+    if (input.assignment !== "any_member" && input.assignment !== "orchestrator_only") throw new CoreError("invalid_input", "unknown assignment");
+    if (input.assignment === "orchestrator_only" && !c.orchestratorId) throw new CoreError("invalid_input", "orchestrator_only requires an orchestrator");
+    c.assignment = input.assignment;
+    this.log("human", "group.update", conversationId, undefined, `assignment=${input.assignment}`);
+    return this.convView(c);
   }
 
   async decideApproval(taskId: string, decision: "approve" | "reject") {
@@ -197,9 +211,9 @@ export class ReferenceCore implements CoreApi, AdminApi {
     if (t.state !== "awaiting_approval") throw new CoreError("invalid_transition", `task is ${t.state}, not awaiting_approval`);
     if (decision === "approve") {
       t.hops = 0;
-      this.transition(t, t.resumeState ?? "queued", undefined, "human", "approval.approve");
+      this.transition(t, "working", undefined, "human", "approval.approve"); // ADR-003 §1: approved resumes to working
     } else {
-      this.transition(t, "failed", "approval_rejected", "human", "approval.reject");
+      this.transition(t, "cancelled", "approval_rejected", "human", "approval.reject"); // ADR-005 §2
       this.cascadeCancel(t.id, "parent_cancelled");
     }
     return this.view(t);
@@ -298,16 +312,18 @@ export class ReferenceCore implements CoreApi, AdminApi {
       }
 
       if (task) {
+        // ADR-003 §1 only allows working -> awaiting_approval. In any other live state the limit
+        // still refuses the message, but the task cannot be paused, so it is left as is.
+        if (task.hops >= task.budget.maxHops) {
+          if (task.state === "working") this.pause(task, "hop_limit_reached", caller);
+          throw new CoreError("limit_exceeded", `hop limit (${task.budget.maxHops}) reached${task.state === "awaiting_approval" ? "; task paused for human review" : ""}`);
+        }
+        if (task.turnsWithoutProgress >= LIMITS.maxTurnsWithoutProgress) {
+          if (task.state === "working") this.pause(task, "no_progress_limit_reached", caller);
+          throw new CoreError("limit_exceeded", `${LIMITS.maxTurnsWithoutProgress} messages without progress${task.state === "awaiting_approval" ? "; task paused for human review" : ""}`);
+        }
         task.hops++;
         task.turnsWithoutProgress++;
-        if (task.hops > task.budget.maxHops) {
-          this.pause(task, "hop_limit_reached", caller);
-          throw new CoreError("limit_exceeded", `hop limit (${task.budget.maxHops}) reached; task paused for human review`);
-        }
-        if (task.turnsWithoutProgress > LIMITS.maxTurnsWithoutProgress) {
-          this.pause(task, "no_progress_limit_reached", caller);
-          throw new CoreError("limit_exceeded", `${LIMITS.maxTurnsWithoutProgress} messages without progress; task paused for human review`);
-        }
       }
 
       const msg = this.storeMessage(caller, conv, m.parts, task?.id, m.inReplyTo);
@@ -369,19 +385,20 @@ export class ReferenceCore implements CoreApi, AdminApi {
         }
       }
 
-      // Permission engine (minimal; WP-E1-03 owns the real one). Requester grant AND assignee policy.
+      // ADR-009 §2(a): requester grant, checked at createTask, fail closed (422 on /v1).
+      // The assignee's policy (§2(b)) is evaluated later, when the assignee accepts.
       if (!me.granted.has(t.category)) {
         this.log(caller, "task.create", assignee.id, "deny", `requester lacks grant '${t.category}'`);
-        throw new CoreError("forbidden", `you are not permitted to request '${t.category}' work`);
-      }
-      const decision = this.policyFor(assignee, t.category);
-      if (decision === "deny") {
-        this.log(caller, "task.create", assignee.id, "deny", `assignee policy denies '${t.category}'`);
-        throw new CoreError("forbidden", `'${t.category}' requests to this entity are denied by its owner`);
+        throw new CoreError("permission_denied", `you are not permitted to request '${t.category}' work`);
       }
 
       const conv = t.conversationId ? this.memberConversation(caller, t.conversationId) : this.dm(caller, assignee.id);
       if (!conv.members.has(assignee.id)) throw new CoreError("forbidden", "assignee is not a member of that conversation");
+      // ADR-011: in an orchestrator_only group, only the orchestrator may assign tasks.
+      if (conv.kind === "group" && conv.assignment === "orchestrator_only" && conv.orchestratorId !== caller) {
+        this.log(caller, "task.create", conv.id, "deny", "group assignment is orchestrator_only");
+        throw new CoreError("forbidden", "only the group orchestrator may assign tasks in this group");
+      }
 
       const nowIso = new Date(this.now()).toISOString();
       const taskId = id("tsk");
@@ -410,12 +427,7 @@ export class ReferenceCore implements CoreApi, AdminApi {
       };
       this.tasks.set(taskId, rec);
       this.log(caller, "task.create", taskId, "allow", t.category);
-      if (decision === "ask") {
-        rec.resumeState = "queued";
-        this.transition(rec, "awaiting_approval", "policy_requires_approval", "system", "task.policy_ask");
-      } else {
-        this.transition(rec, "queued", undefined, "system", "task.policy_allow");
-      }
+      this.transition(rec, "queued", undefined, "system", "task.queue");
       return this.view(rec);
     });
   }
@@ -441,8 +453,16 @@ export class ReferenceCore implements CoreApi, AdminApi {
       case "accept": {
         need(isAssignee, "assignee");
         from("queued");
-        this.messages.get(t.originMessageId)?.receipts.set(caller, "accepted_for_execution");
         this.transition(t, "working", undefined, caller, "task.accept");
+        // ADR-009 §2(b): the assignee's human-set policy is evaluated at accept.
+        const policy = this.policyFor(this.mustEntity(t.assigneeId), t.category);
+        if (policy === "deny") {
+          this.transition(t, "failed", "permission_denied", "system", "task.policy_deny");
+          this.cascadeCancel(t.id, "parent_cancelled");
+          break;
+        }
+        this.messages.get(t.originMessageId)?.receipts.set(caller, "accepted_for_execution");
+        if (policy === "ask") this.pause(t, "policy_requires_approval", "system");
         break;
       }
       case "request_input":
@@ -469,16 +489,17 @@ export class ReferenceCore implements CoreApi, AdminApi {
         break;
       case "fail":
         need(isAssignee, "assignee");
-        from("working", "input_required");
+        from("working"); // ADR-003 §1: failed is reachable only from working
         if (u.parts) this.storeMessage(caller, conv, u.parts, t.id);
         this.transition(t, "failed", "assignee_reported_failure", caller, "task.fail");
         this.cascadeCancel(t.id, "parent_cancelled");
         break;
       case "reject":
+        // ADR-008 §2: the assignee declines before accepting, queued -> cancelled.
         need(isAssignee, "assignee");
-        from("queued", "working");
+        from("queued");
         if (u.parts) this.storeMessage(caller, conv, u.parts, t.id);
-        this.transition(t, "failed", "rejected_by_assignee", caller, "task.reject");
+        this.transition(t, "cancelled", "rejected_by_assignee", caller, "task.reject");
         this.cascadeCancel(t.id, "parent_cancelled");
         break;
       case "cancel":
@@ -488,7 +509,7 @@ export class ReferenceCore implements CoreApi, AdminApi {
         break;
       case "reclassify": {
         need(isAssignee, "assignee");
-        from("queued", "working", "input_required");
+        from("working"); // ADR-009 §3
         if (!ACTION_CATEGORIES.includes(u.category)) throw new CoreError("invalid_input", "unknown category");
         if (categoryRisk(u.category) <= categoryRisk(t.category)) throw new CoreError("invalid_input", "reclassify may only raise the risk category");
         t.category = u.category;
@@ -499,8 +520,7 @@ export class ReferenceCore implements CoreApi, AdminApi {
           this.transition(t, "failed", "permission_denied", caller, "task.reclassify");
           this.cascadeCancel(t.id, "parent_cancelled");
         } else if (policy === "ask") {
-          t.resumeState = t.state;
-          this.transition(t, "awaiting_approval", "reclassified_needs_approval", caller, "task.reclassify");
+          this.pause(t, "policy_requires_approval", caller);
         } else {
           this.log(caller, "task.reclassify", t.id, "allow", u.category);
         }
@@ -653,18 +673,19 @@ export class ReferenceCore implements CoreApi, AdminApi {
 
   private enforceDeadline(t: TaskRec) {
     if (!TERMINAL_STATES.has(t.state) && this.now() > t.deadlineMs) {
-      this.transition(t, "failed", "budget_runtime_exceeded", "system", "task.budget_exceeded");
+      // ADR-003 §1: failed only from working; other live states end as cancelled.
+      this.transition(t, t.state === "working" ? "failed" : "cancelled", "budget_runtime_exceeded", "system", "task.budget_exceeded");
       this.cascadeCancel(t.id, "parent_cancelled");
     }
   }
 
   private pause(t: TaskRec, reason: TaskReason, actor: string) {
-    t.resumeState = t.state;
     this.transition(t, "awaiting_approval", reason, actor, "task.pause");
   }
 
   private transition(t: TaskRec, to: TaskState, reason: TaskReason | undefined, actor: string, action: string) {
     const fromState = t.state;
+    if (!LEGAL_TRANSITIONS[fromState].includes(to)) throw new CoreError("invalid_transition", `illegal transition ${fromState} -> ${to} (ADR-003 §1)`);
     t.state = to;
     t.reason = reason;
     t.turnsWithoutProgress = 0;
@@ -735,12 +756,13 @@ export class ReferenceCore implements CoreApi, AdminApi {
       id: c.id,
       kind: c.kind,
       name: c.name,
+      ...(c.kind === "group" ? { assignment: c.assignment } : {}),
       members: [...c.members].map((m) => ({ id: m, name: this.mustEntity(m).name, isOrchestrator: c.orchestratorId === m })),
     };
   }
 
   private view(t: TaskRec): TaskView {
-    const { deadlineMs, turnsWithoutProgress: _t, resumeState: _r, originMessageId: _o, ...rest } = t;
+    const { deadlineMs, turnsWithoutProgress: _t, originMessageId: _o, ...rest } = t;
     return structuredClone({ ...rest, deadline: new Date(deadlineMs).toISOString() });
   }
 }

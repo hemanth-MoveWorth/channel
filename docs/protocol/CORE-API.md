@@ -20,6 +20,7 @@ interface CoreSession {               // bound to exactly one entity
   listGroups(); getConversationHistory(id, {limit?, before?});
 }
 interface AdminApi { ... }            // human-only: never reachable with an entity key
+                                      // incl. createGroup/updateGroup with `assignment` (ADR-011)
 ```
 
 **Rule 1: identity is bound at authentication.** No session method takes a `caller`, `from`, or `entityId-of-self` argument. A bug in the MCP layer therefore can't act as another entity.
@@ -81,6 +82,37 @@ There's no `rejected` state, because §2.4 freezes the state list. A rejection i
 | D5 | `failed` reachable from `queued` (reject), `input_required` (fail), any non-terminal (runtime budget) | `failed` reachable only from `working` |
 | D6 | No retry edge | `failed → queued` (manual retry, new attempt and idempotency scope) |
 
+**Status after the ADR-alignment batch (2026-10-02).** The reference core now follows ADR-003 §1. Every transition is checked against the table (`LEGAL_TRANSITIONS` in `types.ts`), and ADV-34 verifies it.
+
+| # | Status |
+|---|---|
+| D1 | **Resolved.** Tasks are always queued at creation. The assignee's policy is evaluated at accept (ADR-009 §2(b)): allow keeps `working`, ask goes `working → awaiting_approval` (`policy_requires_approval`), deny goes `working → failed` (`permission_denied`). |
+| D2 | **Resolved.** Pauses (policy ask, upward reclassify, hop limit, no-progress limit) happen only from `working`. If a hop or no-progress limit is hit in another live state, the message is refused and the task is left as it is, because no legal pause edge exists. |
+| D3 | **Resolved.** Approve resumes to `working`. |
+| D4 | **Resolved** (ADR-005 §2). A human reject goes to `cancelled` (`approval_rejected`). |
+| D5 | **Resolved.** `failed` is reached only from `working` (`fail`, reclassify deny, policy deny at accept, runtime budget while working). Runtime expiry in any other live state goes to `cancelled` (`budget_runtime_exceeded`). An assignee decline is `queued → cancelled` (`rejected_by_assignee`, ADR-008 §2). |
+| D6 | **Not built.** `failed → queued` is a human-only manual retry. It is in the transition table but not exposed to entities or to the dev admin API. Entity 1's core owns it. |
+
+### 3.2 Adapter behaviour (normative for the reference core; ADR-003 §1, ADR-005 §3, ADR-008, ADR-009)
+
+| Action | Who | Edge(s) | Reason |
+|---|---|---|---|
+| `createTask` | requester (needs grant, else 422 `permission_denied`) | (new) `submitted → queued` | — |
+| `accept` | assignee | `queued → working`, then by policy: stays, `→ awaiting_approval`, or `→ failed` | `policy_requires_approval` / `permission_denied` |
+| `reject` (decline) | assignee | `queued → cancelled` | `rejected_by_assignee` |
+| `request_input` | assignee | `working → input_required` | — |
+| `provide_input` | requester | `input_required → working` | — |
+| `complete` | assignee | `working → completed` | — |
+| `fail` | assignee | `working → failed` | `assignee_reported_failure` |
+| `reclassify` (upward only) | assignee | from `working`: stays, `→ awaiting_approval`, or `→ failed` | `policy_requires_approval` / `permission_denied` |
+| `cancel` | requester | any live state `→ cancelled` | — |
+| approve / reject | **human only** (ADR-005 §1) | `awaiting_approval → working` / `→ cancelled` | — / `approval_rejected` |
+| stop button | **human only** | any live state `→ cancelled`, cascading | `stopped_by_user` (descendants `parent_cancelled`) |
+| hop / no-progress limit | system | `working → awaiting_approval` | `hop_limit_reached` / `no_progress_limit_reached` |
+| runtime budget | system | `working → failed`, otherwise `→ cancelled` | `budget_runtime_exceeded` |
+
+An entity can do nothing to a task in `awaiting_approval` except cancel it as the requester (ADV-12, ADV-34).
+
 ## 4. Receipts (§2.5)
 
 Receipts are kept **per message, per recipient**:
@@ -92,7 +124,20 @@ Task state and receipts are separate. `accepted_for_execution` and the `queued �
 
 ## 5. Errors
 
-`CoreError.code` ∈ `unauthenticated | not_found | forbidden | invalid_transition | invalid_input | limit_exceeded | conflict`.
+`CoreError.code` ∈ `unauthenticated | not_found | forbidden | invalid_transition | invalid_input | permission_denied | limit_exceeded | conflict`. *(ADR alignment, 2026-10-02.)* `permission_denied` was added for ADR-009 §2(a).
+
+HTTP status on the `/v1` API and on the dev hub:
+
+| Code | HTTP | Used for |
+|---|---|---|
+| `unauthenticated` | 401 | missing or unknown key |
+| `forbidden` | 403 | visible object, action not allowed for this caller (incl. ADR-005 §3 rights, ADR-011 group assignment) |
+| `not_found` | 404 | missing **or invisible** object (non-disclosure) |
+| `conflict` | 409 | duplicate entity name |
+| `invalid_transition` | 422 | edge not in ADR-003 §1 |
+| `permission_denied` | 422 | requester lacks the category grant at `createTask` (ADR-009 §2(a), fail closed) |
+| `invalid_input` | 400 | malformed input |
+| `limit_exceeded` | 413 / 429 | payload, depth, hop, budget, rate limits |
 
 **Non-disclosure rule:** anything the caller isn't allowed to see returns `not_found`, never `forbidden`. That covers other workspaces' entities, conversations the caller isn't in, and tasks the caller isn't a party to. `forbidden` is only for objects the caller can see but may not act on in that way.
 
@@ -104,7 +149,7 @@ Task state and receipts are separate. `accepted_for_execution` and the `queued �
 
 ## 7. Open points for Mow
 
-- `getTask` is in the core API but has no MCP tool (§2 doesn't list one). Requesters currently learn task state only through `check_inbox`. ADR-P5 proposes adding a `get_task` tool.
-- No `listPendingApprovals` on `AdminApi` yet. The UI (WP-E1-04) will need one, so Entity 1 should define it.
+- ~~`getTask` is in the core API but has no MCP tool (§2 doesn't list one). Requesters currently learn task state only through `check_inbox`. ADR-P5 proposes adding a `get_task` tool.~~ **Settled by ADR-010** and built: `get_task` is party-only and non-disclosing (ADV-32).
+- ~~No `listPendingApprovals` on `AdminApi` yet. The UI (WP-E1-04) will need one, so Entity 1 should define it.~~ **Settled by ADR-005 §4:** `GET /v1/approvals?state=pending` on Entity 1's API.
 - *(Added at rebase, 2026-10-01.)* ADR-003 §2 lists `POST /v1/tasks/:id/approve` and `/reject` under entity-key auth, with "the human UI is trusted locally". The security gate requires these to be unreachable with any entity key (SECURITY.md ADV-30, G6). Otherwise an agent could approve its own or a peer's paused task. ~~Mow should confirm they're human-only.~~ **Settled by ADR-005 §1:** approve/reject are human-only and refuse any entity API key with 403 (amends ADR-003 §2).
-- Group semantics beyond membership aren't specified, for example whether only the orchestrator may assign tasks inside a group. The reference core lets any member assign. ADR-P6 proposes orchestrator-only assignment within groups, as an option chosen per group.
+- ~~Group semantics beyond membership aren't specified, for example whether only the orchestrator may assign tasks inside a group. The reference core lets any member assign. ADR-P6 proposes orchestrator-only assignment within groups, as an option chosen per group.~~ **Settled by ADR-011** and built: per-group `assignment`, default `orchestrator_only` with an orchestrator, else `any_member` (ADV-33).

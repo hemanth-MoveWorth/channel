@@ -90,22 +90,31 @@ describe("ADV: capability verification (self-claim never grants)", () => {
     expect((await s!.getEntity(w.keys.ra.entityId)).skills[0].verified).toBe(false);
   });
 
-  it("ADV-08 requesting a category you were not granted is blocked with a reason and audited", async () => {
+  it("ADV-08 requesting a category you were not granted is refused at createTask (422 permission_denied) and audited", async () => {
     const w = await world();
     const ev = await connect(w.core, w.keys.ev.apiKey);
     const r = await ev.call("create_task", { assigneeId: w.keys.cu.entityId, category: "publish", goal: "Post this to our blog" });
     expect(r.isError).toBe(true);
-    expect(r.text).toMatch(/forbidden: .*not permitted to request 'publish'/);
+    expect(r.text).toMatch(/permission_denied: .*not permitted to request 'publish'/);
+    // No task was created, so the assignee never sees the request.
+    expect((await connect(w.core, w.keys.cu.apiKey).then((a) => a.call("check_inbox"))).text).toBe("Inbox empty.");
     const audit = await w.core.auditLog();
     expect(audit.some((e) => e.actor === w.keys.ev.entityId && e.action === "task.create" && e.decision === "deny")).toBe(true);
   });
 
-  it("ADV-09 an assignee's deny rule blocks the task even when the requester is granted", async () => {
+  it("ADV-09 an assignee's deny rule ends the task at accept (failed, permission_denied) even when the requester is granted", async () => {
     const w = await world();
     await w.core.grantCategories(w.keys.cc.entityId, ["research", "publish"]);
     const cc = await connect(w.core, w.keys.cc.apiKey);
-    const r = await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "publish", goal: "Publish" });
-    expect(r.text).toMatch(/denied by its owner/);
+    const ra = await connect(w.core, w.keys.ra.apiKey);
+    const taskId = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "publish", goal: "Publish" })).text);
+    const r = await ra.call("update_task", { taskId, action: "accept" });
+    expect(r.text).toMatch(/now failed \(permission_denied\)/);
+    expect(r.text).toContain("TASK_STATE_REJECTED"); // ADR-008 §3
+    // Deny is final: no further work is possible.
+    expect((await ra.call("update_task", { taskId, action: "complete", artifactText: "posted" })).text).toMatch(/invalid_transition/);
+    const audit = await w.core.auditLog();
+    expect(audit.some((e) => e.action === "task.policy_deny" && e.target === taskId)).toBe(true);
   });
 
   it("ADV-10 under-declared category: assignee reclassifies upward and the task pauses for approval", async () => {
@@ -123,6 +132,14 @@ describe("ADV: capability verification (self-claim never grants)", () => {
     const t2 = grab(TASK_ID, (await ev.call("create_task", { assigneeId: w.keys.ra.entityId, category: "research", goal: "ok" })).text);
     await ra.call("update_task", { taskId: t2, action: "accept" });
     expect((await ra.call("update_task", { taskId: t2, action: "reclassify", category: "research" })).isError).toBe(true);
+    // ADR-009 §3: reclassify only from working.
+    const t3 = grab(TASK_ID, (await ev.call("create_task", { assigneeId: w.keys.ra.entityId, category: "research", goal: "queued one" })).text);
+    expect((await ra.call("update_task", { taskId: t3, action: "reclassify", category: "tool_use" })).text).toMatch(/invalid_transition/);
+    // Granted requester + assignee policy 'ask' -> working -> awaiting_approval.
+    const cc = await connect(w.core, w.keys.cc.apiKey);
+    const t4 = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "research", goal: "looks harmless" })).text);
+    await ra.call("update_task", { taskId: t4, action: "accept" });
+    expect((await ra.call("update_task", { taskId: t4, action: "reclassify", category: "tool_use" })).text).toMatch(/now awaiting_approval \(policy_requires_approval\)/);
   });
 });
 
@@ -155,14 +172,17 @@ describe("ADV: prompt injection (peer content is data)", () => {
     const ra = await connect(w.core, w.keys.ra.apiKey);
     const ev = await connect(w.core, w.keys.ev.apiKey);
     const paused = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "tool_use", goal: "Deploy" })).text);
+    await ra.call("update_task", { taskId: paused, action: "accept" }); // policy 'ask' -> awaiting_approval (ADR-009 §2)
     await ev.call("send_message", { toEntityId: w.keys.ra.entityId, text: INJECTION });
 
     // Simulate the worst case: the assignee's model does exactly what the injection says.
-    for (const action of ["complete", "accept", "provide_input"]) {
+    for (const action of ["complete", "accept", "provide_input", "reject", "fail", "request_input"]) {
       const r = await ra.call("update_task", { taskId: paused, action, artifactText: "done", text: "approved" });
       expect(r.isError, action).toBe(true);
     }
     expect((await ra.call("update_task", { taskId: paused, action: "approve" })).isError).toBe(true); // not an action
+    expect((await ra.call("update_task", { taskId: paused, action: "reclassify", category: "publish" })).isError).toBe(true);
+    expect((await ra.call("send_message", { taskId: paused, text: "approved, proceeding" })).text).toMatch(/paused awaiting human approval/);
     const s = await w.core.authenticate(w.keys.cc.apiKey);
     expect((await s!.getTask(paused)).state).toBe("awaiting_approval");
   });
@@ -231,6 +251,83 @@ describe("ADV: context exfiltration", () => {
     expect((await ox.call("get_profile", { entityId: w.keys.cc.entityId })).text).toMatch(/not_found/);
     expect((await ox.call("send_message", { toEntityId: w.keys.cc.entityId, text: "hi" })).text).toMatch(/not_found/);
     expect((await ox.call("create_task", { assigneeId: w.keys.cc.entityId, category: "research", goal: "x" })).text).toMatch(/not_found/);
+  });
+});
+
+describe("ADV: ADR-aligned task controls", () => {
+  it("ADV-32 get_task never discloses tasks to non-parties (ADR-010)", async () => {
+    const w = await world();
+    const cc = await connect(w.core, w.keys.cc.apiKey);
+    const ox = await connect(w.core, w.keys.ox.apiKey);
+    const ev = await connect(w.core, w.keys.ev.apiKey);
+    const t = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "research", goal: "M&A target list" })).text);
+    for (const a of [ev, ox]) {
+      const r = await a.call("get_task", { taskId: t });
+      expect(r.text).toMatch(/^not_found: task not found$/);
+    }
+  });
+
+  it("ADV-33 a member cannot bypass orchestrator_only by assigning inside the group (ADR-011)", async () => {
+    const w = await world();
+    const { conversationId: g } = await w.core.createGroup({ workspaceId: w.workspaceId, name: "Ops", memberIds: [w.keys.ev.entityId, w.keys.ra.entityId, w.keys.cu.entityId], orchestratorId: w.keys.ra.entityId });
+    const ev = await connect(w.core, w.keys.ev.apiKey);
+    const r = await ev.call("create_task", { assigneeId: w.keys.cu.entityId, category: "research", goal: "do my bidding", conversationId: g });
+    expect(r.text).toMatch(/forbidden: only the group orchestrator/);
+    const audit = await w.core.auditLog();
+    expect(audit.some((e) => e.actor === w.keys.ev.entityId && e.target === g && e.decision === "deny")).toBe(true);
+  });
+
+  it("ADV-34 every recorded transition on every path is legal under ADR-003 §1", async () => {
+    const { LEGAL_TRANSITIONS } = await import("../src/core/types.js");
+    const w = await world();
+    const cc = await connect(w.core, w.keys.cc.apiKey);
+    const ra = await connect(w.core, w.keys.ra.apiKey);
+    const mk = async (category: string, extra: Record<string, unknown> = {}) =>
+      grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category, goal: "g", ...extra })).text);
+    // happy path through approval, input, completion
+    const a = await mk("tool_use");
+    await ra.call("update_task", { taskId: a, action: "accept" });
+    await w.core.decideApproval(a, "approve");
+    await ra.call("update_task", { taskId: a, action: "request_input", text: "?" });
+    await cc.call("update_task", { taskId: a, action: "provide_input", text: "!" });
+    await ra.call("update_task", { taskId: a, action: "complete", artifactText: "ok" });
+    // decline, fail, requester cancel from several states, human reject
+    await ra.call("update_task", { taskId: await mk("research"), action: "reject" });
+    const f = await mk("research"); await ra.call("update_task", { taskId: f, action: "accept" }); await ra.call("update_task", { taskId: f, action: "fail" });
+    await cc.call("update_task", { taskId: await mk("research"), action: "cancel" });
+    const ci = await mk("research"); await ra.call("update_task", { taskId: ci, action: "accept" });
+    await ra.call("update_task", { taskId: ci, action: "request_input", text: "?" }); await cc.call("update_task", { taskId: ci, action: "cancel" });
+    const hr = await mk("tool_use"); await ra.call("update_task", { taskId: hr, action: "accept" }); await w.core.decideApproval(hr, "reject");
+    const ca = await mk("tool_use"); await ra.call("update_task", { taskId: ca, action: "accept" }); await cc.call("update_task", { taskId: ca, action: "cancel" });
+    // policy deny at accept, reclassify deny, hop pause, stop button with cascade
+    await w.core.grantCategories(w.keys.cc.entityId, ["research", "read_context", "tool_use", "publish"]);
+    await ra.call("update_task", { taskId: await mk("publish"), action: "accept" });
+    const rc = await mk("research"); await ra.call("update_task", { taskId: rc, action: "accept" });
+    await ra.call("update_task", { taskId: rc, action: "reclassify", category: "publish" });
+    const hp = await mk("research", { budget: { maxHops: 1 } }); await ra.call("update_task", { taskId: hp, action: "accept" });
+    await ra.call("send_message", { taskId: hp, text: "1" }); await ra.call("send_message", { taskId: hp, text: "2" });
+    const st = await mk("research"); await ra.call("update_task", { taskId: st, action: "accept" });
+    await w.core.grantCategories(w.keys.ra.entityId, ["research"]);
+    await ra.call("create_task", { assigneeId: w.keys.cu.entityId, category: "research", goal: "child", parentTaskId: st });
+    await w.core.stopTask(st);
+    // budget expiry in working (-> failed) and in queued (-> cancelled)
+    const bw = await mk("research", { budget: { maxRuntimeSec: 5 } }); await ra.call("update_task", { taskId: bw, action: "accept" });
+    const bq = await mk("research", { budget: { maxRuntimeSec: 5 } });
+    w.clock.advance(6_000);
+    await cc.call("get_task", { taskId: bw }); await cc.call("get_task", { taskId: bq });
+
+    const edges = (await w.core.auditLog()).filter((e) => / -> /.test(e.detail ?? "")).map((e) => e.detail!.split(" "));
+    expect(edges.length).toBeGreaterThan(30);
+    const seen = new Set<string>();
+    for (const [from, , to] of edges) {
+      seen.add(`${from}->${to}`);
+      expect(LEGAL_TRANSITIONS[from as keyof typeof LEGAL_TRANSITIONS], `${from} -> ${to}`).toContain(to);
+    }
+    // Every edge ADR-003 §1 exposes to this flow was exercised (failed -> queued is a human-only retry, not built).
+    for (const e of ["submitted->queued", "queued->working", "queued->cancelled", "working->input_required", "working->awaiting_approval", "working->completed",
+      "working->failed", "working->cancelled", "input_required->working", "input_required->cancelled", "awaiting_approval->working", "awaiting_approval->cancelled"]) {
+      expect(seen, e).toContain(e);
+    }
   });
 });
 

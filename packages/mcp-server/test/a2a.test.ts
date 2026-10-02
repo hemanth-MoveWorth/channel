@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { validateAgentCard } from "../src/a2a/card.js";
 import { A2A_TASK_STATES, fromA2AState, toA2AState } from "../src/a2a/mapping.js";
-import { TASK_STATES } from "../src/core/types.js";
+import { TASK_REASONS, TASK_STATES } from "../src/core/types.js";
 
 const load = (f: string) => JSON.parse(readFileSync(new URL(`../../../schemas/examples/${f}`, import.meta.url), "utf8"));
 
@@ -41,10 +41,11 @@ describe("Task state mapping", () => {
     }
   });
 
-  it("rejections surface as TASK_STATE_REJECTED", () => {
-    expect(toA2AState("failed", "rejected_by_assignee").state).toBe("TASK_STATE_REJECTED");
-    expect(toA2AState("failed", "approval_rejected").state).toBe("TASK_STATE_REJECTED");
-    expect(toA2AState("failed", "budget_runtime_exceeded").state).toBe("TASK_STATE_FAILED");
+  it("ADR-008 §3: only failed + permission_denied is REJECTED; cancelled is always CANCELED", () => {
+    expect(toA2AState("failed", "permission_denied").state).toBe("TASK_STATE_REJECTED");
+    for (const r of TASK_REASONS.filter((x) => x !== "permission_denied")) expect(toA2AState("failed", r).state, r).toBe("TASK_STATE_FAILED");
+    for (const r of TASK_REASONS) expect(toA2AState("cancelled", r).state, r).toBe("TASK_STATE_CANCELED");
+    expect(toA2AState("cancelled", "approval_rejected").metadata["signaldesk/reason"]).toBe("approval_rejected");
   });
 
   it("awaiting_approval is shown as WORKING (client must wait, cannot resolve it)", () => {
@@ -59,7 +60,12 @@ describe("Task state mapping", () => {
       }
       expect(TASK_STATES).toContain(fromA2AState(a).state);
     }
-    expect(fromA2AState("TASK_STATE_AUTH_REQUIRED")).toEqual({ state: "awaiting_approval", reason: "external_auth_required" });
+    expect(fromA2AState("TASK_STATE_AUTH_REQUIRED")).toEqual({ state: "awaiting_approval" });
+    expect(fromA2AState("TASK_STATE_REJECTED")).toEqual({ state: "cancelled", reason: "rejected_by_assignee" });
+    for (const a of A2A_TASK_STATES.filter((x) => x !== "TASK_STATE_UNSPECIFIED")) {
+      const r = fromA2AState(a).reason;
+      if (r) expect(TASK_REASONS, a).toContain(r); // ADR-008 §1: closed enum
+    }
   });
 
   it("round-trips are stable for the states A2A can express", () => {

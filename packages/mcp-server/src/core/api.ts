@@ -11,6 +11,7 @@ import type {
   ConversationView,
   EntityId,
   EntityPublicProfile,
+  GroupAssignment,
   InboxItem,
   MessageId,
   MessageView,
@@ -110,7 +111,11 @@ export interface AdminApi {
     name: string;
     memberIds: EntityId[];
     orchestratorId?: EntityId;
+    /** ADR-011. Default: orchestrator_only when an orchestrator is set, otherwise any_member. */
+    assignment?: GroupAssignment;
   }): Promise<{ conversationId: ConversationId }>;
+  /** ADR-011 §2: the group update schema carries the assignment setting. */
+  updateGroup(conversationId: ConversationId, input: { assignment: GroupAssignment }): Promise<ConversationView>;
   decideApproval(taskId: TaskId, decision: "approve" | "reject"): Promise<TaskView>;
   /** The stop button. Cancels the task and every descendant. */
   stopTask(taskId: TaskId): Promise<TaskView[]>;

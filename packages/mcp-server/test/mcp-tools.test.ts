@@ -11,6 +11,7 @@ const CONTRACT_TOOLS = [
   "reply",
   "create_task",
   "update_task",
+  "get_task", // ADR-010
   "list_groups",
   "get_conversation_history",
 ];
@@ -106,16 +107,60 @@ describe("MCP tool surface", () => {
     expect(hist[0].taskId).toBe(taskId);
   });
 
-  it("tasks needing approval pause, and only a human decision resumes them", async () => {
+  it("ADR-009: policy is checked at accept; 'ask' pauses and only a human decision resumes", async () => {
     const w = await world();
     const cc = await connect(w.core, w.keys.cc.apiKey);
     const ra = await connect(w.core, w.keys.ra.apiKey);
     const created = await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "tool_use", goal: "Run the pricing scraper" });
     const taskId = grab(TASK_ID, created.text);
-    expect(created.text).toMatch(/awaiting_approval/);
-    expect((await ra.call("update_task", { taskId, action: "accept" })).isError).toBe(true);
+    expect(created.text).toMatch(/state: queued/); // not paused at creation any more
+    expect((await ra.call("update_task", { taskId, action: "accept" })).text).toMatch(/now awaiting_approval \(policy_requires_approval\)/);
+    expect((await ra.call("update_task", { taskId, action: "complete", artifactText: "x" })).isError).toBe(true);
     await w.core.decideApproval(taskId, "approve");
-    expect((await ra.call("update_task", { taskId, action: "accept" })).text).toMatch(/now working/);
+    expect((await ra.call("get_task", { taskId })).text).toMatch(/is working/); // ADR-003 §1: resumes to working
+    expect((await ra.call("update_task", { taskId, action: "complete", artifactText: "done" })).text).toMatch(/now completed/);
+  });
+
+  it("ADR-005 §2: a human rejection cancels with approval_rejected (A2A CANCELED)", async () => {
+    const w = await world();
+    const cc = await connect(w.core, w.keys.cc.apiKey);
+    const ra = await connect(w.core, w.keys.ra.apiKey);
+    const taskId = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "tool_use", goal: "Run it" })).text);
+    await ra.call("update_task", { taskId, action: "accept" });
+    await w.core.decideApproval(taskId, "reject");
+    const out = (await cc.call("get_task", { taskId })).text;
+    expect(out).toMatch(/is cancelled \(approval_rejected\)/);
+    expect(out).toContain("TASK_STATE_CANCELED");
+  });
+
+  it("ADR-008 §2: assignee declines before accepting -> cancelled with rejected_by_assignee", async () => {
+    const w = await world();
+    const cc = await connect(w.core, w.keys.cc.apiKey);
+    const ra = await connect(w.core, w.keys.ra.apiKey);
+    const t1 = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "research", goal: "a" })).text);
+    const r = await ra.call("update_task", { taskId: t1, action: "reject", text: "Not my area" });
+    expect(r.text).toMatch(/now cancelled \(rejected_by_assignee\)/);
+    expect(r.text).toContain("TASK_STATE_CANCELED");
+    // After accepting, declining is no longer possible; the assignee uses fail instead.
+    const t2 = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "research", goal: "b" })).text);
+    await ra.call("update_task", { taskId: t2, action: "accept" });
+    expect((await ra.call("update_task", { taskId: t2, action: "reject" })).text).toMatch(/invalid_transition/);
+    expect((await ra.call("update_task", { taskId: t2, action: "fail", text: "broke" })).text).toMatch(/now failed \(assignee_reported_failure\)/);
+  });
+
+  it("ADR-010: get_task is party-only and non-disclosing", async () => {
+    const w = await world();
+    const cc = await connect(w.core, w.keys.cc.apiKey);
+    const ra = await connect(w.core, w.keys.ra.apiKey);
+    const ev = await connect(w.core, w.keys.ev.apiKey);
+    const taskId = grab(TASK_ID, (await cc.call("create_task", { assigneeId: w.keys.ra.entityId, category: "research", goal: "secret goal" })).text);
+    expect((await cc.call("get_task", { taskId })).text).toMatch(/is queued/);
+    expect((await ra.call("get_task", { taskId })).text).toContain("secret goal");
+    const other = await ev.call("get_task", { taskId });
+    const missing = await ev.call("get_task", { taskId: "tsk_0000000000000000" });
+    expect(other.text).toBe(missing.text);
+    expect(other.text).toMatch(/not_found/);
+    expect(other.text).not.toContain("secret goal");
   });
 
   it("list_groups shows membership and the orchestrator", async () => {
@@ -127,6 +172,26 @@ describe("MCP tool surface", () => {
     expect(out.text).toContain("Launch");
     const cu = await connect(w.core, w.keys.cu.apiKey);
     expect((await cu.call("list_groups")).text).toMatch(/^0 groups/);
+  });
+
+  it("ADR-011: group assignment setting (defaults, enforcement, update)", async () => {
+    const w = await world();
+    const members = [w.keys.cc.entityId, w.keys.ra.entityId, w.keys.cu.entityId];
+    const { conversationId: g } = await w.core.createGroup({ workspaceId: w.workspaceId, name: "Squad", memberIds: members, orchestratorId: w.keys.ra.entityId });
+    const cc = await connect(w.core, w.keys.cc.apiKey);
+    const ra = await connect(w.core, w.keys.ra.apiKey);
+    expect((await cc.call("list_groups")).text).toMatch(/"assignment": "orchestrator_only"/);
+    // Default orchestrator_only: a non-orchestrator member cannot assign inside the group...
+    expect((await cc.call("create_task", { assigneeId: w.keys.cu.entityId, category: "research", goal: "x", conversationId: g })).text).toMatch(/only the group orchestrator/);
+    // ...the orchestrator can.
+    expect((await ra.call("create_task", { assigneeId: w.keys.cu.entityId, category: "research", goal: "x", conversationId: g })).isError).toBe(false);
+    // any_member lets members assign, still subject to ADR-009 grants (ev has none of tool_use).
+    await w.core.updateGroup(g, { assignment: "any_member" });
+    expect((await cc.call("create_task", { assigneeId: w.keys.cu.entityId, category: "research", goal: "y", conversationId: g })).isError).toBe(false);
+    await expect(w.core.createGroup({ workspaceId: w.workspaceId, name: "x", memberIds: members, assignment: "orchestrator_only" })).rejects.toThrow(/requires an orchestrator/);
+    const { conversationId: g2 } = await w.core.createGroup({ workspaceId: w.workspaceId, name: "Flat", memberIds: members });
+    const groups = await (await w.core.authenticate(w.keys.cc.apiKey))!.listGroups();
+    expect(groups.find((x) => x.id === g2)!.assignment).toBe("any_member"); // default without orchestrator
   });
 
   it("orchestrator must be a type A entity", async () => {

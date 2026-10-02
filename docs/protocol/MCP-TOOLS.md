@@ -15,8 +15,9 @@ All input schemas are closed (`additionalProperties: false`). Unknown arguments,
 | `check_inbox` | New messages + task updates. Marks receipts `delivered`. | `limit?` |
 | `reply` | Reply in the same conversation and task thread as a message | `messageId`, `text`, `data?`, `idempotencyKey?` |
 | `create_task` | Tracked, permission-checked work request | `assigneeId`, `category`, `goal`, `expectedOutput?`, `constraints?`, `inputText?`, `inputData?`, `conversationId?`, `parentTaskId?`, `sourceRefs?`, `budget?`, `idempotencyKey?` |
-| `update_task` | Move a task: `accept`, `request_input`, `provide_input`, `complete`, `fail`, `reject`, `cancel`, `reclassify` | `taskId`, `action`, `text?`, `artifactName?`, `artifactText?`, `artifactData?`, `category?` |
-| `list_groups` | Your groups, members, orchestrator | none |
+| `update_task` | Move a task (ADR-003 §1, ADR-005 §3). Assignee: `accept` (policy checked here, ADR-009), `reject` (decline while queued → cancelled), `request_input`, `complete`, `fail`, `reclassify` (upward, from working). Requester: `provide_input`, `cancel`. | `taskId`, `action`, `text?`, `artifactName?`, `artifactText?`, `artifactData?`, `category?` |
+| `get_task` | Read one task you requested or were assigned (ADR-010). Others get `not_found`. | `taskId` |
+| `list_groups` | Your groups, members, orchestrator, `assignment` (ADR-011) | none |
 | `get_conversation_history` | Messages in a conversation you belong to | `conversationId`, `limit?`, `before?` |
 
 Categories, lowest to highest risk: `research`, `read_context`, `tool_use`, `write`, `send_external`, `publish`.
@@ -76,4 +77,4 @@ Endpoint: `http://127.0.0.1:8787/mcp` with header `Authorization: Bearer sdk_…
 curl -s -X POST http://127.0.0.1:8787/admin/call -H "Authorization: Bearer <adminToken from keys.json>" -H "content-type: application/json" -d '{"method":"decideApproval","args":["tsk_…","approve"]}'
 ```
 
-Methods: `verifySkill`, `grantCategories`, `setApprovalMode`, `createGroup`, `decideApproval`, `stopTask`, `auditLog`, `createEntity`, `revokeKey`, `createWorkspace`.
+Methods: `verifySkill`, `grantCategories`, `setApprovalMode`, `createGroup`, `updateGroup`, `decideApproval`, `stopTask`, `auditLog`, `createEntity`, `revokeKey`, `createWorkspace`.

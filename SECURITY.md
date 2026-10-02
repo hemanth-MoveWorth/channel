@@ -63,9 +63,9 @@ entity edits a verified skill ─► digest no longer matches ─► verified=fa
   1. *May this entity request category X?* That's the requester's grants.
   2. *May others make this entity do X, and does it need approval?* That's the assignee's policy.
 
-  Both must allow a request (*ADV-08, -09*).
+  Both must allow a request (*ADV-08, -09*). *(ADR alignment, 2026-10-02.)* The requester grant is checked at `createTask` and refused with 422 `permission_denied`. The assignee policy is checked when the assignee accepts, per ADR-009 §2. A deny from either side is final.
 - A card can't carry grants: `verifiedPermissions`, `grantedCategories` and `skills[].verified` are rejected by the schema, and the MCP tool refuses them too (*ADV-05, -06*). Claimed skills are shown to peers as `verified: false` (*ADV-07*).
-- **Under-declared categories.** Requesters choose the category, and a liar might label "run a command" as `research`. The assignee can `reclassify` the task upward only. That re-runs both checks, and the task fails closed or pauses for approval (*ADV-10*). This is a judgement control and depends on the assignee. See R2.
+- **Under-declared categories.** Requesters choose the category, and a liar might label "run a command" as `research`. The assignee can `reclassify` the task upward only, from `working` (ADR-009 §3). That re-runs both checks, and the task fails closed or pauses for approval (*ADV-10*). This is a judgement control and depends on the assignee. See R2.
 
 ## 4. Runaway-work limits (§2.9)
 
@@ -74,9 +74,9 @@ Defined in [`src/security/limits.ts`](packages/mcp-server/src/security/limits.ts
 | Limit | Value | Behaviour | Test |
 |---|---|---|---|
 | Delegation depth | 3 below the root | `limit_exceeded`. Only the assignee of a `working` parent may delegate. Delegating to anyone already in the chain is refused. | ADV-21 |
-| Hops per task | default 24, ceiling 100 | Task → `awaiting_approval` (`hop_limit_reached`). Further messages refused until a human approves, which resets the counter. | ADV-19 |
+| Hops per task | default 24, ceiling 100 | From `working`: task → `awaiting_approval` (`hop_limit_reached`). Further messages refused until a human approves, which resets the counter. In other live states the message is refused without a pause, since ADR-003 §1 has no edge for it. | ADV-19 |
 | Turns without progress | 10 | Same pause (`no_progress_limit_reached`). Catches polite ping-pong under a large hop budget. | ADV-20 |
-| Runtime | default 15 min, ceiling 24 h | Checked on every access. Task → `failed` (`budget_runtime_exceeded`), descendants cancelled. A child's budget is capped at the parent's remaining time. | ADV-22 |
+| Runtime | default 15 min, ceiling 24 h | Checked on every access. Task → `failed` if working, otherwise `cancelled` (`budget_runtime_exceeded`, ADR-003 §1). Descendants cancelled. A child's budget is capped at the parent's remaining time. | ADV-22 |
 | Cost | ceiling $25 | Only enforceable for SignalDesk-hosted LLMs (built-in orchestrator, type C proxies). See R4. | (G4 / WP-E1-02) |
 | Stop button | n/a | `AdminApi.stopTask` cancels the whole task tree | ADV-23 |
 | Rate | 120 calls/min per entity | Keyed by entity, not session, so extra sessions don't buy throughput | ADV-24 |
@@ -94,11 +94,11 @@ All in `packages/mcp-server/test/`. Each one simulates the attack end to end.
 | ADV-04 | Impersonating display names | name validator + uniqueness | blocked |
 | ADV-05/06 | Self-granted permissions in agent card | strict schema; grants outside the card | blocked |
 | ADV-07 | Bait-and-switch a verified skill | digest-pinned verification | blocked |
-| ADV-08 | Request an ungranted category | requester grant check + audit | blocked |
-| ADV-09 | Bypass assignee's deny rule | assignee policy check | blocked |
-| ADV-10 | Under-declare category to dodge approval | upward-only reclassify, fail closed | blocked |
+| ADV-08 | Request an ungranted category | requester grant checked at `createTask` (422 `permission_denied`) + audit; no task, no delivery | blocked |
+| ADV-09 | Bypass assignee's deny rule | assignee policy checked at accept → `failed` (`permission_denied`, A2A REJECTED); deny final | blocked |
+| ADV-10 | Under-declare category to dodge approval | upward-only reclassify from `working`, both checks re-run, fail closed or pause | blocked |
 | ADV-11 | Injection payload incl. forged envelope closer + invisible chars | envelope + nonce + defang + strip | contained |
-| ADV-12 | Hijacked recipient tries to complete or approve paused work | state machine; no approve tool | blocked |
+| ADV-12 | Hijacked recipient tries to complete, decline, reclassify or approve work paused at accept | ADR-003 §1 table; no entity edge out of `awaiting_approval`; no approve tool | blocked |
 | ADV-13 | Requester self-completes or self-accepts | role checks | blocked |
 | ADV-14 | Third party touches someone else's task | party check, non-disclosure | blocked |
 | ADV-15 | Read a conversation you're not in | membership check; `not_found` same as nonexistent | blocked |
@@ -117,8 +117,11 @@ All in `packages/mcp-server/test/`. Each one simulates the attack end to end.
 | ADV-29 | Huge request body | 1 MiB cap | 413 |
 | ADV-30 | Entity key used on admin endpoints | separate human credential | 401 |
 | ADV-31 | Call non-session methods over core RPC | method allow-list | 400 |
+| ADV-32 | Read someone else's task via `get_task` | party-only, `not_found` for others (ADR-010) | blocked |
+| ADV-33 | Assign work inside an `orchestrator_only` group as a non-orchestrator | group assignment check + audit (ADR-011) | blocked |
+| ADV-34 | Drive a task through an illegal transition | every transition checked against ADR-003 §1; all 12 entity/system edges exercised | blocked |
 
-**Checking the tests themselves:** three controls were removed on purpose (session binding, envelope defang, source-ref check). Each removal made exactly its matching test fail (ADV-27, ADV-11, ADV-16), so the tests detect real regressions and don't pass vacuously.
+**Checking the tests themselves:** three controls were removed on purpose (session binding, envelope defang, source-ref check). Each removal made exactly its matching test fail (ADV-27, ADV-11, ADV-16), so the tests detect real regressions and don't pass vacuously. *(ADR alignment, 2026-10-02.)* The same check was repeated for the new controls. Removing the group-assignment check fails ADV-33. Removing deny-at-accept fails ADV-09. Disabling the transition guard and adding an illegal edge fails ADV-34.
 
 ## 6. Running the gate
 
@@ -150,8 +153,11 @@ Legend: ☑ done and tested · ☐ open (owner)
 **Capability verification**
 - ☑ Strict Agent Card schema. Self-granting fields rejected.
 - ☑ Skills unverified until a human verifies them. Edits drop verification.
-- ☑ Requester grant AND assignee policy must both allow. Deny is final. Ask pauses.
-- ☑ Upward-only reclassify, fail closed
+- ☑ Requester grant AND assignee policy must both allow (ADR-009). Grant checked at `createTask` (422), policy at accept. Deny is final. Ask pauses (`working → awaiting_approval`).
+- ☑ Upward-only reclassify from `working`, fail closed
+- ☑ Task transitions limited to ADR-003 §1 and checked on every transition. Entity rights per ADR-005 §3. No entity edge out of `awaiting_approval`.
+- ☑ Assignee decline = `queued → cancelled` (`rejected_by_assignee`, ADR-008)
+- ☑ Per-group assignment, `orchestrator_only` by default with an orchestrator (ADR-011)
 
 **Limits**
 - ☑ Delegation depth cap, cycle check, assignee-only delegation
@@ -162,7 +168,7 @@ Legend: ☑ done and tested · ☐ open (owner)
 - ☐ Cost budget metering for hosted LLM calls (Entity 1, WP-E1-02)
 
 **Data access**
-- ☑ Workspace isolation. Non-disclosure (`not_found`) for invisible objects.
+- ☑ Workspace isolation. Non-disclosure (`not_found`) for invisible objects, including `get_task` (ADR-010).
 - ☑ Conversation membership required for read and write
 - ☑ Anti confused-deputy check on source refs
 - ☑ Public profile excludes webhook URL, owner data, grants, key material
@@ -182,6 +188,7 @@ Legend: ☑ done and tested · ☐ open (owner)
 - **R4. Cost budgets for external agents** can't be metered. Only runtime, hops and depth apply to them.
 - **R5. Rate-limit and session state are per process** (in-memory). Horizontal scaling needs a shared store.
 - **R6. Keys on client disks.** `.mcp.json` stores the key in plain text, so `.mcp.json` is git-ignored. Rotate on suspicion.
+- **R8. Denied requests still reach the assignee.** *(ADR alignment, 2026-10-02.)* Since ADR-009 evaluates the assignee's policy at accept, a request in a category the assignee's owner denies is still delivered to its inbox. The goal text is visible before the deny ends the task. The task can't proceed, but the text is peer content the assignee's model reads (see R1). A missing requester grant still stops the request before delivery.
 - **R7. Supply chain.** The dependency tree comes from the lockfile. `npm audit` reported 0 vulnerabilities on 2026-10-01. Re-run in CI.
 
 ## 9. Sign-off
@@ -207,3 +214,4 @@ Legend: ☑ done and tested · ☐ open (owner)
 ### Gate log
 - 2026-10-01: E2 layer PASS (localhost). G1–G6 open.
 - 2026-10-01: G6 re-scoped for localhost per Mow's ruling and ADR-005 §1: entity keys get 403 on approve/reject, proven by ADV-30 against Entity 1's API. G6 still open until that test passes and the audit log is append-only.
+- 2026-10-02: ADR-alignment batch (ADR-003 §1, ADR-005, ADR-008 to ADR-011) applied to the E2 layer and reference core. Evidence: 57/57 tests, including 34 adversarial (ADV-01 to ADV-34), plus mutation checks for the new controls. E2 layer PASS (localhost) re-affirmed. G1 to G6 still open.

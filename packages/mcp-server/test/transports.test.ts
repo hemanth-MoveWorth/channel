@@ -59,7 +59,7 @@ afterAll(async () => {
 describe("streamable HTTP transport", () => {
   it("serves the tools to an authenticated client", async () => {
     const { client, transport } = await httpClient(w.keys.cc.apiKey);
-    expect((await client.listTools()).tools.length).toBe(10);
+    expect((await client.listTools()).tools.length).toBe(11);
     const r = await client.callTool({ name: "list_entities", arguments: {} });
     expect(textOf(r)).toContain(w.keys.ra.entityId);
     await transport.close();

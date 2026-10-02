@@ -41,6 +41,7 @@ const ADMIN_METHODS = [
   "grantCategories",
   "setApprovalMode",
   "createGroup",
+  "updateGroup",
   "decideApproval",
   "stopTask",
   "auditLog",
@@ -161,7 +162,14 @@ export function createHub(opts: HubOptions): { server: Server; url: string; clos
       send(res, 404, { error: { code: "not_found", message: "not found" } });
     } catch (e) {
       if (e instanceof CoreError) {
-        const status = e.code === "limit_exceeded" ? 413 : e.code === "not_found" ? 404 : e.code === "forbidden" ? 403 : 400;
+        const status =
+          e.code === "limit_exceeded" ? 413
+          : e.code === "not_found" ? 404
+          : e.code === "forbidden" ? 403
+          : e.code === "unauthenticated" ? 401
+          : e.code === "conflict" ? 409
+          : e.code === "invalid_transition" || e.code === "permission_denied" ? 422 // ADR-003 §1, ADR-009 §2(a)
+          : 400;
         return send(res, status, { error: { code: e.code, message: redactSecrets(e.message) } });
       }
       log(`[signaldesk] http error: ${redactSecrets(String((e as Error)?.stack ?? e))}`);

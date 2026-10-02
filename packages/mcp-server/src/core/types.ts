@@ -24,6 +24,18 @@ export const TASK_STATES = [
 export type TaskState = (typeof TASK_STATES)[number];
 export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["completed", "failed", "cancelled"]);
 
+/** ADR-003 §1: the only legal task transitions. Anything else is a bug (the /v1 API answers 422). */
+export const LEGAL_TRANSITIONS: Readonly<Record<TaskState, readonly TaskState[]>> = {
+  submitted: ["queued", "cancelled"],
+  queued: ["working", "cancelled"],
+  working: ["input_required", "awaiting_approval", "completed", "failed", "cancelled"],
+  input_required: ["working", "cancelled"],
+  awaiting_approval: ["working", "cancelled"],
+  failed: ["queued"], // manual retry only (human); not exposed to entities
+  completed: [],
+  cancelled: [],
+};
+
 /** ARCHITECTURE §2.5 — delivery receipts, per recipient. */
 export type ReceiptState = "stored" | "delivered" | "accepted_for_execution";
 
@@ -42,20 +54,20 @@ export const ACTION_CATEGORIES = [
 export type ActionCategory = (typeof ACTION_CATEGORIES)[number];
 export const categoryRisk = (c: ActionCategory): number => ACTION_CATEGORIES.indexOf(c);
 
-/** Why a task failed / paused. Free-form strings are not allowed so the UI and A2A mapping stay total. */
-export type TaskReason =
-  | "rejected_by_assignee"
-  | "approval_rejected"
-  | "permission_denied"
-  | "budget_runtime_exceeded"
-  | "hop_limit_reached"
-  | "no_progress_limit_reached"
-  | "reclassified_needs_approval"
-  | "policy_requires_approval"
-  | "external_auth_required"
-  | "stopped_by_user"
-  | "parent_cancelled"
-  | "assignee_reported_failure";
+/** ADR-008 §1: the closed TaskReason enum carried on transitions. Nothing else may be stored. */
+export const TASK_REASONS = [
+  "rejected_by_assignee",
+  "approval_rejected",
+  "permission_denied",
+  "assignee_reported_failure",
+  "policy_requires_approval",
+  "hop_limit_reached",
+  "no_progress_limit_reached",
+  "budget_runtime_exceeded",
+  "stopped_by_user",
+  "parent_cancelled",
+] as const;
+export type TaskReason = (typeof TASK_REASONS)[number];
 
 /** A2A-shaped content part (A2A v1.0 `Part`, JSON form). Only text + data in the prototype. */
 export type Part =
@@ -148,10 +160,15 @@ export type InboxItem =
   | { kind: "message"; message: MessageView; receipt: ReceiptState }
   | { kind: "task_update"; task: TaskView; event: string; at: string };
 
+/** ADR-011: who may assign tasks inside a group. */
+export type GroupAssignment = "any_member" | "orchestrator_only";
+
 export interface ConversationView {
   id: ConversationId;
   kind: "dm" | "group";
   name?: string;
+  /** Groups only (ADR-011). */
+  assignment?: GroupAssignment;
   members: { id: EntityId; name: string; isOrchestrator: boolean }[];
 }
 
@@ -162,6 +179,7 @@ export type CoreErrorCode =
   | "forbidden"
   | "invalid_transition"
   | "invalid_input"
+  | "permission_denied" // ADR-009 §2(a): missing requester grant; /v1 answers 422
   | "limit_exceeded"
   | "conflict";
 

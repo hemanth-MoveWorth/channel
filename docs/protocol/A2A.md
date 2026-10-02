@@ -52,9 +52,9 @@ Task metadata keys: `signaldesk/state` (exact internal state) and `signaldesk/re
 | `input_required` | `TASK_STATE_INPUT_REQUIRED` | The requester is expected to send input |
 | `awaiting_approval` | `TASK_STATE_WORKING` | See §3.1 |
 | `completed` | `TASK_STATE_COMPLETED` | |
-| `failed` + reason ∈ {`rejected_by_assignee`, ~~`approval_rejected`~~, `permission_denied`} | `TASK_STATE_REJECTED` | A2A separates "won't do" from "tried and failed". *`approval_rejected` superseded by ADR-005 §2: a rejected approval is `cancelled` (reason `approval_rejected`) and maps to `TASK_STATE_CANCELED`.* |
+| `failed` + reason ∈ {~~`rejected_by_assignee`~~, ~~`approval_rejected`~~, `permission_denied`} | `TASK_STATE_REJECTED` | A2A separates "won't do" from "tried and failed". *`approval_rejected` superseded by ADR-005 §2: a rejected approval is `cancelled` (reason `approval_rejected`) and maps to `TASK_STATE_CANCELED`.* *`rejected_by_assignee` superseded by ADR-008 §2–3: an assignee decline is `cancelled`. Only `failed` + `permission_denied` is REJECTED.* |
 | `failed` (any other reason) | `TASK_STATE_FAILED` | |
-| `cancelled` | `TASK_STATE_CANCELED` | Spelling differs |
+| `cancelled` (any reason) | `TASK_STATE_CANCELED` | Spelling differs. Includes `approval_rejected` and `rejected_by_assignee` (ADR-008 §3). The reason travels in `signaldesk/reason`. |
 
 ### Inbound (status reported by an external A2A agent we delegated to)
 
@@ -63,10 +63,10 @@ Task metadata keys: `signaldesk/state` (exact internal state) and `signaldesk/re
 | `TASK_STATE_SUBMITTED` | `submitted` | |
 | `TASK_STATE_WORKING` | `working` | |
 | `TASK_STATE_INPUT_REQUIRED` | `input_required` | |
-| `TASK_STATE_AUTH_REQUIRED` | `awaiting_approval` (`external_auth_required`) | Only a human can supply credentials. They are never relayed in chat (§2.8). |
+| `TASK_STATE_AUTH_REQUIRED` | `awaiting_approval` (~~`external_auth_required`~~ no reason) | Only a human can supply credentials. They are never relayed in chat (§2.8). *(ADR alignment, 2026-10-02.)* ADR-008 §1's closed reason enum has no fitting value, so no reason is attached. Flagged to Mow. |
 | `TASK_STATE_COMPLETED` | `completed` | |
 | `TASK_STATE_FAILED` | `failed` (`assignee_reported_failure`) | |
-| `TASK_STATE_REJECTED` | `failed` (`rejected_by_assignee`) | |
+| `TASK_STATE_REJECTED` | ~~`failed` (`rejected_by_assignee`)~~ `cancelled` (`rejected_by_assignee`) | ADR-008 §2: an agent declining is cancelled, not failed. |
 | `TASK_STATE_CANCELED` | `cancelled` | |
 | `TASK_STATE_UNSPECIFIED` | **refused** | Not a valid update |
 

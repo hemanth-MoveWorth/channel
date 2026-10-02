@@ -18,7 +18,8 @@ export type A2ATaskState = (typeof A2A_TASK_STATES)[number];
 export const SIGNALDESK_STATE_METADATA_KEY = "signaldesk/state";
 export const SIGNALDESK_REASON_METADATA_KEY = "signaldesk/reason";
 
-const REJECTION_REASONS: ReadonlySet<TaskReason> = new Set(["rejected_by_assignee", "approval_rejected", "permission_denied"]);
+// ADR-008 §3: only failed + permission_denied is shown as REJECTED.
+const REJECTION_REASONS: ReadonlySet<TaskReason> = new Set(["permission_denied"]);
 
 /** Outbound: what an external A2A client sees. Lossy by design; the exact state rides in metadata. */
 export function toA2AState(state: TaskState, reason?: TaskReason): { state: A2ATaskState; metadata: Record<string, string> } {
@@ -41,7 +42,7 @@ export function toA2AState(state: TaskState, reason?: TaskReason): { state: A2AT
     case "failed":
       return { state: reason && REJECTION_REASONS.has(reason) ? "TASK_STATE_REJECTED" : "TASK_STATE_FAILED", metadata };
     case "cancelled":
-      return { state: "TASK_STATE_CANCELED", metadata };
+      return { state: "TASK_STATE_CANCELED", metadata }; // any reason, incl. approval_rejected / rejected_by_assignee
   }
 }
 
@@ -56,13 +57,15 @@ export function fromA2AState(a2a: A2ATaskState): { state: TaskState; reason?: Ta
       return { state: "input_required" };
     case "TASK_STATE_AUTH_REQUIRED":
       // The remote agent needs credentials/consent; only a human can provide those. Never forward secrets in chat (§2.8).
-      return { state: "awaiting_approval", reason: "external_auth_required" };
+      // ADR-008's closed reason enum has no fitting value, so no reason is attached (flagged to Mow).
+      return { state: "awaiting_approval" };
     case "TASK_STATE_COMPLETED":
       return { state: "completed" };
     case "TASK_STATE_FAILED":
       return { state: "failed", reason: "assignee_reported_failure" };
     case "TASK_STATE_REJECTED":
-      return { state: "failed", reason: "rejected_by_assignee" };
+      // ADR-008 §2: an agent declining is cancelled with rejected_by_assignee, not failed.
+      return { state: "cancelled", reason: "rejected_by_assignee" };
     case "TASK_STATE_CANCELED":
       return { state: "cancelled" };
     case "TASK_STATE_UNSPECIFIED":
