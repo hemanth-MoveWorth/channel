@@ -10,3 +10,6 @@ data/
 *.db
 *.db-wal
 *.db-shm
+.signaldesk-dev/
+.mcp.json
+*.log
