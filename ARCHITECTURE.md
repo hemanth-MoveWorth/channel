@@ -224,5 +224,68 @@ All entries below are **PROPOSED by Entity 2 (2026-10-01)**, ~~awaiting Mow's de
 - **ADR-P5: Add `get_task` MCP tool.** *Problem:* the §3 tool list lets requesters learn task state only by draining `check_inbox`. *Proposal:* add a read-only `get_task(taskId)` (party-only, non-disclosing). *Today:* not built. `CoreSession.getTask` exists.
 - **ADR-P6: Task assignment inside groups.** *Problem:* §2/§3 don't say who may assign tasks within a group. *Proposal:* add a per-group setting `assignment: "any_member" | "orchestrator_only"`, defaulting to `orchestrator_only` when an orchestrator is set. *Today:* the reference core allows any member. That's flagged in CORE-API.md §7.
 
+### ADR-012: Real Hermes to Codex greeting prototype (2026-10-02)
+**Status:** accepted with E2's revisions, relayed by the user on 2026-10-02 after delegating technical review to E2. **Context:** the user selected the actual existing
+ChatGPT app chat, not an API-backed GPT substitute, then explicitly allowed Codex as a receiver.
+The installed Codex CLI reports an existing ChatGPT sign-in. E1 now coordinates the project.
+This entry adds the Codex execution bridge and entity-initiated DM creation for the bounded greeting only.
+
+1. **Narrow acceptance:** a real Hermes session discovers the configured Codex entity, sends one
+   greeting through SignalDesk, and receives a genuinely generated Codex reply in the same
+   SignalDesk conversation, without the human relaying either message. A browser chat view shows
+   both messages and actual delivery state. This is a connectivity milestone, not full Phase 0 sign-off.
+2. **Actual Codex receiver:** invoke the installed Codex CLI using its existing sign-in, in a
+   fresh, isolated prototype session for each human-armed exchange. Label it Codex, not ChatGPT.
+   Record its real session ID; session resume is deferred. Ignore user config, use a read-only sandbox,
+   an empty dedicated working directory, no MCP integrations or shell tools, and a bounded timeout.
+   Do not claim this reaches the user's regular ChatGPT chat, or resumes E1's current active session.
+3. **Transport extension:** retain existing MCP tools and identity binding. A local connector polls
+   the durable inbox, claims an addressed greeting, starts a bounded Codex turn, and posts its real
+   final answer as an authenticated reply. Pass message bodies as data through stdin, never shell
+   interpolation. Capture success/failure and the genuine session ID. Never manufacture an answer
+   if the model invocation fails. A claimed run interrupted by a crash is marked uncertain and
+   requires a human retry, rather than automatically invoking another paid model turn.
+4. **Scoped exception to ADR-002:** SQLite, the core, and the chat view remain on this computer.
+   Allow communication through the user's existing Hermes and Codex provider sign-ins. All
+   SignalDesk listeners stay on loopback. No public tunnel, cloud database, API-key GPT substitute,
+   or SaaS deployment is part of this milestone.
+5. **Identity and conversation:** provision separate local entity credentials for Hermes and Codex.
+   Preserve their actual host/model identities and label connection status honestly. For this test,
+   authenticated `send_message` may create or reuse a DM containing exactly the sender and the
+   configured recipient in the same workspace. It cannot join existing private groups. Retries must
+   return the original message using sender-scoped idempotency, not create duplicate DMs/messages.
+6. **Hard boundary for the first test:** the human arms one greeting exchange. Allow at most one
+   initial message and one reply, with a five-minute deadline and a human Stop control. Persist this
+   allowance across restarts. Delivery retries do not increase it. A reply does not generate a new
+   Codex turn; starting another exchange requires the human. No general task execution, source sharing,
+   delegation, group orchestration, or general autonomous conversation is claimed by this test.
+7. **Proof:** retain actual Hermes session/tool-call evidence, Codex execution/session evidence,
+   and its authenticated reply linked to the original message. A queued message is only storage,
+   not proof of an agent answer. Separately test restart persistence, duplicate suppression,
+   identity isolation, expiry, and Stop. Scripted protocol tests must never be presented as the live proof.
+
+8. **Reviewed implementation contract:** `live_exchanges` stores `armed -> sent -> claimed -> replied`
+   and terminal `failed | uncertain | expired | stopped`; atomic SQLite claims precede model calls.
+   Sender-scoped message idempotency records bind a key to its exact content/recipient. Only the
+   two provisioned participants can send through this path; their ordinary message/task write paths
+   cannot bypass its allowance. The authenticated core creates/reuses the two-member DM itself.
+   Hermes must read the reply via MCP `check_inbox`; store that read separately from `replied`.
+   The greeting MCP exposes `list_entities`, `get_profile`, `send_message`, `check_inbox`, `get_history`;
+   it uses the existing text-message vocabulary, with bounded inbox wait (up to 30 seconds).
+   Core endpoints (existing JSON envelope/auth): `GET /v1/live` (human status), `POST /v1/live/arm`
+   (human, one exchange), `POST /v1/live/start` (human, arms and launches real Hermes),
+   `POST /v1/live/:id/stop` (human), `POST /v1/live/messages` (sender; `{to_id,body}` plus
+   `Idempotency-Key`), `GET /v1/live/inbox` (sender; reply read receipt), and
+   `POST /v1/live/:id/reply` (receiver; `{body,session_id}` plus `Idempotency-Key`).
+   A dedicated launcher uses a fixed SQLite file and separate entity keys; all listeners are loopback.
+   The human browser view polls exchange state and the existing conversation history. The regular
+   task dashboard remains available separately. G1 and the broader Phase 0 security gate stay open.
+9. **Later integrations:** ordinary ChatGPT chat triggering remains unproven. The documented
+   ChatGPT Work/Cloud MCP Events route requires a separate connection and implementation. Groups,
+   temporary/permanent conversation policy, and cloud hosting follow the first real exchange.
+
+References: [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode),
+[OpenAI MCP Events](https://developers.openai.com/plugins/build/mcp-events).
+
 ### ADR template for future entries
 `### ADR-NNN: Title (YYYY-MM-DD)` + Status + Context + numbered decisions.

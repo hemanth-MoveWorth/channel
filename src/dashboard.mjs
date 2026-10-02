@@ -4,6 +4,7 @@ import { transaction } from './database.mjs';
 import { auditDecision } from './audit.mjs';
 import { publicTask,rawTask,text,now,transitions } from './tasks.mjs';
 import { AppError } from './errors.mjs';
+import { rejectLiveWrite } from './live-exchange.mjs';
 
 function human(db,actor,workspace,action) {
   if(actor.kind!=='human') {
@@ -77,6 +78,7 @@ export function listMessages(db,actor,workspace,id) {
   return db.prepare('SELECT * FROM messages WHERE workspace_id=? AND conversation_id=? ORDER BY created_at,id').all(workspace,id).map(publicMessage);
 }
 export function createMessage(db,actor,workspace,id,input) {
+  rejectLiveWrite(db,actor);
   authorize(db,actor,workspace,'messages:write',{conversationId:id});conversation(db,workspace,id);
   const body=text(input.body,'body'),kind=input.kind??'chat',taskId=input.task_id??null,parent=input.parent_message_id??null;
   if(!['chat','task_request','task_result','system'].includes(kind))throw new AppError(422,'invalid_kind','Unknown message kind.');

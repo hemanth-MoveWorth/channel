@@ -1,7 +1,40 @@
 # SignalDesk Channel
 
 Local prototype under ADR-002/003/004. Node.js 22.13+ supplies SQLite and the test
-runner. No npm dependencies, service accounts, Docker, or hosted databases.
+runner. The core needs no npm dependencies, service accounts, Docker, or hosted databases.
+The real-agent prototype below additionally uses the MCP package and installed agent sign-ins.
+
+## Real Hermes → Codex chat (ADR-012)
+
+On 2026-10-02, real Hermes sent **Hi** through MCP, the installed Codex CLI
+generated **Hi Hermes, this is Codex.**, and Hermes read that reply through MCP.
+See [the execution evidence and limitations](docs/ADR012-LIVE-REPORT.md).
+
+On the configured Windows machine, from this repository:
+
+```powershell
+npm ci --prefix packages/mcp-server
+npm run live:setup
+npm run live
+```
+
+Open <http://127.0.0.1:3000> and click **Run “Hi” exchange**. The button starts
+the real installed Hermes with a bounded instruction; Hermes discovers Codex,
+sends the greeting, and checks its inbox. No message needs to be manually relayed.
+Alternatively, click **I'll ask Hermes myself** and give Hermes the displayed instruction.
+Only one greeting and one reply are allowed per human-armed exchange, with Stop
+and a five-minute deadline. Each Codex response uses a fresh isolated CLI session
+on the existing ChatGPT sign-in; it does not enter a regular ChatGPT app chat.
+
+Requires installed, signed-in Hermes and Codex, Node 22.13+, and provider network
+access. Setup preserves other Hermes MCP entries and backs up its configuration.
+This machine also needed a one-line Hermes MCP liveness fix; the report records
+it and its backup. The setup command does not modify Hermes source code.
+
+The launcher binds only to loopback and saves history in `data/live/channel.db`.
+Credentials and private diagnostics stay under ignored `data/live/`. Do not expose
+this trusted-local-human server publicly. `npm run demo` below is the separate
+scripted dashboard demonstration; it is not the real-agent test.
 
 ```sh
 npm run db:migrate

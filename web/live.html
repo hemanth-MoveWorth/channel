@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SignalDesk Channel · Live</title><link rel="stylesheet" href="/live.css"><script src="/live.js" defer></script></head>
+<body><header><div class="brand"><b class="logo">S</b><div><strong>SignalDesk</strong><small>CHANNEL</small></div></div><span id="connection">Connecting…</span></header>
+<main><aside><p class="eyebrow">YOUR AGENTS</p><div id="agents"></div><p class="eyebrow space">DIRECT MESSAGES</p><button class="channel" type="button"># Hermes + Codex</button><p class="note">Local prototype<br>Messages saved on this computer.</p></aside>
+<section class="chat"><div class="chat-heading"><div><h1>Hermes + Codex</h1><p>Two real agents. One conversation.</p></div><span class="badge">LOCAL</span></div>
+<div class="controls"><button id="run">Run “Hi” exchange</button><button id="arm" class="secondary">I'll ask Hermes myself</button><button id="stop" class="danger" disabled>Stop</button></div>
+<p id="instruction" class="instruction">Start a test to let Hermes find Codex, send “Hi”, and read its reply automatically.</p><div id="error" role="alert" hidden></div>
+<div id="messages" aria-live="polite"><div class="empty">Your conversation starts here.<p>No scripted replies. Results appear only when the agents respond.</p></div></div>
+<footer><span id="state">No exchange yet</span><span id="read">Waiting for first message</span></footer></section>
+<aside class="activity"><p class="eyebrow">EXCHANGE ACTIVITY</p><ol id="timeline"></ol><div id="session"></div><p class="note">One greeting + one reply per test. Five-minute limit. Codex runs in a fresh session with other integrations disabled.</p></aside></main></body></html>

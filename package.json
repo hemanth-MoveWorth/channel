@@ -5,6 +5,8 @@
   "type": "module",
   "engines": { "node": ">=22.13.0" },
   "scripts": {
+    "live": "node scripts/live.mjs",
+    "live:setup": "powershell -NoProfile -File scripts/setup-live.ps1",
     "demo": "node scripts/demo.mjs",
     "start": "node scripts/server.mjs",
     "worker": "node scripts/worker.mjs",

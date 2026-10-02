@@ -29,7 +29,7 @@ test('migration upgrades the approved four-migration schema without inventing ca
     seed(db);
     db.prepare(`INSERT INTO tasks(id,workspace_id,conversation_id,created_by_user_id,assigned_entity_id,goal,state,idempotency_key,created_at,recipient_entity_ids)
       VALUES ('legacy',?,?,?,?,?,'queued','legacy',?,?)`).run(demo.workspace,demo.group,demo.user,demo.research,'Unclassified historical request',new Date().toISOString(),JSON.stringify([demo.research]));
-    assert.deepEqual(migrate(db),['005_categories_reasons.sql']);assert.deepEqual(migrate(db),[]);
+    assert.deepEqual(migrate(db),['005_categories_reasons.sql','006_live_exchange.sql']);assert.deepEqual(migrate(db),[]);
     assert.equal(db.prepare("SELECT category FROM tasks WHERE id='legacy'").get().category,null);
     assert.deepEqual(JSON.parse(db.prepare('SELECT category_grants FROM entities WHERE id=?').get(demo.research).category_grants),['research']);
     setPermissionMode(db,{kind:'human',user_id:demo.user},demo.workspace,'*','full_access_workspace');
