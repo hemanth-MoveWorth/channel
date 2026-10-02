@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SignalDesk Channel</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><div class="brand"><span class="mark">S</span><div><strong>SignalDesk</strong><span class="subbrand">CHANNEL</span></div></div><div class="session"><span class="dot"></span>Local workspace <span class="divider">/</span> Human supervisor</div><span id="connection" role="status">Connecting…</span></header>
+<main>
+<div class="intro"><div><p class="eyebrow">YOUR COLLABORATION DESK</p><h1>Work together. Stay in control.</h1><p>One place for your entities, conversations and requests.</p></div><button id="refresh" class="secondary">Refresh now</button></div>
+<div id="notice" role="alert" hidden></div>
+<div class="layout">
+<aside class="panel directory"><div class="section-title"><h2>Entity directory</h2><span id="entity-count" class="count">0</span></div><p class="muted small">Explore skills and connection status.</p><div id="entities"></div></aside>
+<section class="panel conversation-panel"><div class="section-title"><h2>Conversations</h2><button id="new-conversation" class="secondary">New conversation</button></div>
+<form id="conversation-form" class="inset" hidden><h3>Create a conversation</h3><div class="form-row"><label>Type<select name="type"><option value="group">Group</option><option value="dm">Direct message</option></select></label><label>Title<input name="title" required maxlength="200" placeholder="e.g. Launch research"></label></div><fieldset><legend>Entities</legend><div id="member-options"></div></fieldset><label>Orchestrator<select name="orchestrator_entity_id"><option value="">No orchestrator</option></select></label><p class="muted small">Only a type A entity in this conversation can orchestrate.</p><button>Create conversation</button></form>
+<label class="conversation-picker">Open conversation<select id="conversation-select"><option value="">Choose a conversation</option></select></label><p id="conversation-meta" class="muted small"></p>
+<div id="messages" class="messages" role="log" aria-label="Conversation messages" aria-live="polite"></div>
+<form id="message-form"><label>Message<textarea name="body" rows="2" required placeholder="Share an update or ask a question…"></textarea></label><button>Send message</button></form>
+<form id="task-form" class="inset"><h3>Request work</h3><label>Assign to<select name="assigned_entity_id" required></select></label><label>Category<select name="category" required><option value="research">Research</option><option value="read_context">Read context</option><option value="tool_use">Tool use</option><option value="write">Write</option><option value="send_external">Send externally</option><option value="publish">Publish</option></select></label><label>Goal<textarea name="goal" rows="2" required placeholder="What should this entity deliver?"></textarea></label><button>Create request</button><p class="muted small">Workspace permission rules apply before any work is sent.</p></form>
+</section>
+<aside class="activity"><section class="panel"><div class="section-title"><h2>Needs approval</h2><span id="approval-count" class="count amber">0</span></div><div id="approvals" aria-live="polite"></div></section>
+<section class="panel"><div class="section-title"><h2>Task activity</h2><span id="task-total" class="count">0</span></div><label>Filter status<select id="status-filter"><option value="">All states</option><option>queued</option><option>working</option><option>input_required</option><option>awaiting_approval</option><option>completed</option><option>failed</option><option>cancelled</option></select></label><div id="tasks" aria-live="polite"></div><div class="pagination"><button id="previous" class="secondary">Previous</button><span id="page-label" class="small"></span><button id="next" class="secondary">Next</button></div></section></aside>
+</div><footer>Local prototype · Polls every 2 seconds · Human access is trusted on this machine</footer>
+</main></body></html>

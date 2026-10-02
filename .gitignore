@@ -1,4 +1,15 @@
 node_modules/
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+coverage/
+data/
+.tmp/
+*.db
+*.db-wal
+*.db-shm
 .signaldesk-dev/
 .mcp.json
 *.log
